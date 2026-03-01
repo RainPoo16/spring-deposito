@@ -21,6 +21,11 @@
       "type": "http",
       "url": "https://api.githubcopilot.com/mcp/",
       "description": "GitHub operations - PRs, issues, repos"
+    },
+    "grep-app": {
+      "type": "http",
+      "url": "https://mcp.grep.app",
+      "description": "Code search and understanding"
     }
   }
 }
