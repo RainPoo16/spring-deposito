@@ -40,6 +40,19 @@
     </license>
   </licenses>
 
+  <pluginRepositories>
+    <pluginRepository>
+      <id>openrewrite-maven-plugin</id>
+      <name>Moderne Maven Repository</name>
+      <url>https://artifactory.moderne.io/artifactory/public</url>
+    </pluginRepository>
+    <pluginRepository>
+      <id>central</id>
+      <name>Maven Central</name>
+      <url>https://repo.maven.apache.org/maven2</url>
+    </pluginRepository>
+  </pluginRepositories>
+
   <dependencies>
     <!-- Spring and Spring Boot dependencies -->
     <dependency>
@@ -287,6 +300,11 @@
         <?m2e ignore?>
         <groupId>org.cyclonedx</groupId>
         <artifactId>cyclonedx-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.openrewrite.maven</groupId>
+        <artifactId>rewrite-maven-plugin</artifactId>
+        <version>6.29.0</version>
       </plugin>
     </plugins>
   </build>
