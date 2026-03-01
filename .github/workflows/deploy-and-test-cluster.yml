@@ -26,6 +26,6 @@ jobs:
 
       - name: Wait for Pods to be ready
         run: |
-          kubectl wait --for=condition=ready pod -l app=demo-db --timeout=180s
-          kubectl wait --for=condition=ready pod -l app=petclinic --timeout=180s
+          kubectl wait --for=condition=ready pod -l app=deposit-db --timeout=180s
+          kubectl wait --for=condition=ready pod -l app=deposit-service --timeout=180s
 
