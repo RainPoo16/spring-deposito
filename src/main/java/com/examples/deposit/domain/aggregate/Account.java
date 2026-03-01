@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import com.examples.deposit.domain.constant.AccountStatus;
+import com.examples.deposit.exception.InsufficientBalanceException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -69,7 +70,7 @@ public class Account {
 		requireActiveStatus();
 		requirePositiveAmount(amount);
 		if (this.balance.compareTo(amount) < 0) {
-			throw new IllegalStateException("Insufficient balance");
+			throw new InsufficientBalanceException("Insufficient balance for debit of " + amount);
 		}
 		this.balance = this.balance.subtract(amount);
 		this.updatedAt = LocalDateTime.now();
