@@ -7,13 +7,13 @@
     <version>4.0.1</version>
   </parent>
   <groupId>org.springframework.samples</groupId>
-  <artifactId>spring-petclinic</artifactId>
+  <artifactId>spring-deposito</artifactId>
   <version>4.0.0-SNAPSHOT</version>
-  <name>petclinic</name>
+  <name>deposito</name>
 
   <properties>
     <!-- Generic properties -->
-    <java.version>17</java.version>
+    <java.version>21</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <!-- Important for reproducible builds. Update using e.g. ./mvnw versions:set -DnewVersion=... -->
@@ -39,6 +39,19 @@
       <url>https://www.apache.org/licenses/LICENSE-2.0</url>
     </license>
   </licenses>
+
+  <pluginRepositories>
+    <pluginRepository>
+      <id>openrewrite-maven-plugin</id>
+      <name>Moderne Maven Repository</name>
+      <url>https://artifactory.moderne.io/artifactory/public</url>
+    </pluginRepository>
+    <pluginRepository>
+      <id>central</id>
+      <name>Maven Central</name>
+      <url>https://repo.maven.apache.org/maven2</url>
+    </pluginRepository>
+  </pluginRepositories>
 
   <dependencies>
     <!-- Spring and Spring Boot dependencies -->
@@ -287,6 +300,18 @@
         <?m2e ignore?>
         <groupId>org.cyclonedx</groupId>
         <artifactId>cyclonedx-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.openrewrite.maven</groupId>
+        <artifactId>rewrite-maven-plugin</artifactId>
+        <version>6.29.0</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.openrewrite.recipe</groupId>
+            <artifactId>rewrite-migrate-java</artifactId>
+            <version>3.7.0</version>
+          </dependency>
+        </dependencies>
       </plugin>
     </plugins>
   </build>
