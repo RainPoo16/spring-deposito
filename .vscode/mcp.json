@@ -1,0 +1,31 @@
+{
+  "servers": {
+    // Reminder: Always use under 80 tools to avoid overwhelming the model.
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "description": "Persistent memory across sessions"
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "description": "Chain-of-thought reasoning"
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "description": "GitHub operations - PRs, issues, repos"
+    },
+    "grep-app": {
+      "type": "http",
+      "url": "https://mcp.grep.app",
+      "description": "Code search and understanding"
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [".github/copilot-instructions.md"],
+  "theme": "tokyonight",
+  "agent": {
+    "Atlas": {
+      "mode": "primary",
+      "model": "github-copilot/claude-sonnet-4.6",
+      "prompt": ".github/agents/Atlas.agent.md",
+      "variant": "max",
+      "color": "#FFC0CB"
+    },
+    "Prometheus": {
+      "mode": "primary",
+      "model": "github-copilot/claude-sonnet-4.6",
+      "prompt": ".github/agents/Prometheus.agent.md",
+      "variant": "max",
+      "color": "#00FFFF"
+    },
+    "Code-Review-subagent": {
+      "mode": "subagent",
+      "hidden": true,
+      "prompt": ".github/agents/Code-Review-subagent.agent.md"
+    },
+    "Explorer-subagent": {
+      "mode": "subagent",
+      "hidden": true,
+      "prompt": ".github/agents/Explorer-subagent.agent.md"
+    },
+    "Frontend-Engineer-subagent": {
+      "mode": "subagent",
+      "hidden": true,
+      "prompt": ".github/agents/Frontend-Engineer-subagent.agent.md"
+    },
+    "Oracle-subagent": {
+      "mode": "subagent",
+      "hidden": true,
+      "prompt": ".github/agents/Oracle-subagent.agent.md"
+    },
+    "Sisyphus-subagent": {
+      "mode": "subagent",
+      "hidden": true,
+      "prompt": ".github/agents/Sisyphus-subagent.agent.md"
+    }
+  },
+  "mcp": {
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"]
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "grep-app": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
