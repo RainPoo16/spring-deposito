@@ -5,13 +5,13 @@ applyTo: '**/*.java, **/*.groovy, **/application*.properties, **/application*.ym
 excludeAgent: ["coding-agent"]
 ---
 
-# Code Reviewer Instructions for Card Service
+# Code Reviewer Instructions
 
-> **Based on Actual Implementation**: Review guidelines for the Card Service, a Spring Boot microservice managing card lifecycle, payment network transactions (Visa, MyDebit, SAN), settlement reconciliation, and digital wallet integrations.
+> **Based on Actual Implementation**: These patterns reflect established conventions for Spring Boot microservices. Examples use this repository's structure for illustration.
 
 ## Overview
 
-This instruction set guides comprehensive code review for the **Card Service**, a Spring Boot microservice managing card lifecycle, payment network transactions (Visa, MyDebit, SAN), settlement reconciliation, and digital wallet integrations. Reviews ensure architectural compliance, financial security standards, and FinTech regulatory requirements.
+This instruction set guides comprehensive code review for a Spring Boot financial microservice. Reviews ensure architectural compliance, financial security standards, and regulatory requirements.
 
 ## Core Principles
 
@@ -19,7 +19,7 @@ You are conducting comprehensive code reviews to ensure **architectural complian
 
 ### BEFORE Starting Any Review
 
-1. **Read Card Service Architecture**: Review `ARCHITECTURE.md` for domain model, event-driven patterns, and card service architecture
+1. **Understand Service Architecture**: Review package boundaries, domain model, and event-driven patterns from the existing codebase
 2. **Understand Coding Standards**: Study all relevant `.github/instructions/*.instructions.md` files for established patterns
 3. **Review PII Protection**: Read `.github/instructions/pii-protection.instructions.md` - CRITICAL for financial data
 4. **Examine Similar Code**: Analyze similar implementations to understand established patterns
@@ -101,47 +101,29 @@ Structure your review output as:
 
 ## Enhanced Review Areas
 
-### Card Service Architecture Compliance Standards
+### Architecture Compliance Standards
 
-- **Package Structure**: Verify proper organization following card service conventions:
-  - `com.ytl.card.controller/` - REST API controllers with OpenAPI documentation
-  - `com.ytl.card.service/` - Business logic and transaction orchestration
-  - `com.ytl.card.repository/` - JPA repositories for database access
-  - `com.ytl.card.dto/` - Data Transfer Objects for API contracts
-  - `com.ytl.card.external/` - External service integrations (Episode6, Payment Platform, Authentication)
-  - `com.ytl.card.config/` - Spring configuration classes
-  - `com.ytl.card.domain/` - Domain entities, enums, exceptions, and constants
-  - `com.ytl.card.handler/` - Kafka event handlers and publishers
-  - `com.ytl.card.util/` - Utility classes and helpers
-  - `com.ytl.card.observability/` - OpenTelemetry span instrumentation
-  - `com.ytl.card.cron/` - Scheduled tasks and batch processing
+- **Package Structure**: Verify proper organization following service conventions:
+  - `com.examples.deposit.controller/` - REST API controllers with OpenAPI documentation
+  - `com.examples.deposit.service/` - Business logic and transaction orchestration
+  - `com.examples.deposit.repository/` - JPA repositories for database access
+  - `com.examples.deposit.dto/` - Data Transfer Objects for API contracts
+  - `com.examples.deposit.config/` - Spring configuration classes
+  - `com.examples.deposit.domain/` - Domain aggregates, entities, enums, exceptions, and constants
+  - `com.examples.deposit.mapper/` - Mapper components
+  - `com.examples.deposit.exception/` - Exception types and handlers
 - **Design Patterns**: Event-driven architecture with outbox pattern, Command Query Separation, Circuit Breaker
 - **Spring Boot Standards**: Proper use of annotations, dependency injection, Java 21 features (records, pattern matching, virtual threads)
 - **Code Organization**: Logical separation of concerns following DDD principles
-- **Card Service Specific Patterns**:
-  - Transaction processing with dual-message (Visa) and single-message (MyDebit/SAN) flows
-  - Settlement reconciliation with VSS and S01/M01 report parsing
-  - Digital wallet token lifecycle management (Google Pay, Apple Pay)
-  - 3D Secure authentication flows
+- **Service Specific Patterns**:
+  - Transaction processing with deterministic state transitions
   - Event outbox pattern for guaranteed event delivery
   - Idempotent event processing with correlation IDs
-- **Customer Entity Usage** (CRITICAL - Common Confusion):
-  - **CustomerProjection.java**: Event-sourced projection from customer service events
-    - `CustomerProjection.id()` returns the **actual customerId** used throughout the card service
-    - This is the primary customer identifier for all card-related operations
-    - Updated via Kafka event handlers listening to customer service events
-  - **Customer.java**: Card service-specific customer entity
-    - `Customer.id()` is an internal database ID (auto-generated, card service only)
-    - `Customer.customerId()` references `CustomerProjection.id()` as a foreign key
-    - Contains card-related fields and relationships (cards, accounts, preferences)
-  - **NEVER use**: `customerRepository.findById(customerId)` - This searches by wrong ID!
-  - **ALWAYS use**: `customerRepository.findByCustomerId(customerId)` - Correct lookup method
-  - **Rationale**: The `Customer` entity duplicates `CustomerProjection` data with card-specific fields. The `customerId` field in `Customer` matches `CustomerProjection.id()`, not `Customer.id()`
-  - **Review Checkpoint**: Flag any code using `findById()` with a customerId variable - this is almost always incorrect
+  - Resilient external provider integrations with retry/backoff
 
-### Card Service Database & Schema Review
+### Database & Schema Review
 
-- **Entity Design**: JPA entities follow card service patterns with proper annotations:
+- **Entity Design**: JPA entities follow service patterns with proper annotations:
   - `@Entity`, `@Table` with explicit schema and table names
   - `@Id` with UUID generation strategy
   - `@ManyToOne`, `@OneToMany` relationships with proper fetch strategies
@@ -154,75 +136,67 @@ Structure your review output as:
   - Rollback safety and idempotency
   - Proper indexing for query performance
   - Foreign key constraints and referential integrity
-- **Avro Schemas**: Event schemas in `schemas/card/` directory:
+- **Avro Schemas**: Event schemas in repository schema directories (if present):
   - Schema evolution compatibility (backward, forward, full)
   - Proper versioning (v1, v2, etc.)
-  - Card-specific events: `TransactionCleared`, `TransactionFinalised`, `CardStatusUpdated`, `CardCreated`, etc.
+  - Domain events such as `TransactionProcessed`, `TransactionFinalised`, `AccountStatusUpdated`, `AccountCreated`, etc.
   - Projection schemas for event snapshots
   - Code generation compatibility with Java records
-- **Data Modeling**: Card service specific models:
-  - Card entities: `Card`, `CardAccount`, `CardProgram`, `FundOption`
-  - Transaction entities: `VisaCardTransaction`, `MyDebitCardTransaction`, `SanCardTransaction`
-  - Settlement entities: `VisaSettlement`, `MyDebitSettlement`, `SanSettlement`
-  - Wallet entities: `GooglePayToken`, `ApplePayToken`
+- **Data Modeling**: Financial service domain models:
+  - Account entities: `Account`, `AccountStatus`
+  - Transaction entities: `Transaction`, `TransactionType`
+  - Settlement entities: service-defined reconciliation entities
+  - Integration entities: provider token/reference entities where applicable
   - Proper relationships, composite keys, and database constraints
 
-### Card Service Configuration Management Validation
+### Configuration Management Validation
 
 - **Environment Variables**: Proper externalization of sensitive configuration:
   - Database credentials (never hardcoded)
-  - External service credentials (Episode6, Payment Platform)
+  - External service credentials (provider APIs, authentication platforms)
   - API keys and secrets via AWS Secrets Manager or environment variables
   - Kafka bootstrap servers and credentials
-- **Spring Profiles**: Correct usage of card service profiles:
+- **Spring Profiles**: Correct usage of service profiles:
   - `test` - Integration test configuration with TestContainers
   - `application-self-service` - Self-service API configuration
   - `application-internal` - Internal API configuration
   - `eventhandler` - Kafka event handler configuration
-  - `episode6` - Episode6 card provider integration
-  - `hitrust` - HiTrust payment network integration
-  - `taskrunner` - Scheduled task and cron job configuration
-  - `paynet-sftp` - PayNet SFTP settlement file processing
+  - `taskrunner` - Scheduled task and batch job configuration
+  - Provider/integration profiles scoped to explicit integration concerns
 - **Cron Task Profile Requirements**: All cron tasks must follow profile annotation standards:
   - **Scheduled cron tasks** must use `@Profile("taskrunner")` to ensure they only run via command line
   - **Backfill and manual fix tasks** may use `@Profile("!test")` since they are run manually, not on a cron schedule
-  - Tasks with external dependencies can combine profiles: `@Profile({"taskrunner", "paynet-sftp"})`
+  - Tasks with external dependencies can combine profiles: `@Profile({"taskrunner", "provider-integration"})`
 - **Application Properties**: Proper configuration structure in `application.yml`:
   - Spring Data JPA configuration (PostgreSQL)
   - Kafka producer/consumer configuration with Avro serialization
   - OpenTelemetry and Micrometer configuration
   - External service URLs and timeouts
   - Feature flags and business rules
-  - Card program configurations and limits
-- **Card Service Specific Configuration**:
-  - Card network configurations (Visa, MyDebit, SAN)
+  - Product configurations and limits
+- **Service Specific Configuration**:
   - Transaction limits and fee structures
   - Settlement schedules and reconciliation rules
-  - Digital wallet provider configurations
-  - 3D Secure authentication settings
+  - External provider integration configurations
+  - Security/authentication settings
   - Fraud detection thresholds
 
-### Card Service Integration Architecture Review
+### Integration Architecture Review
 
-- **External Services Integration**: Card service specific integrations:
-  - **Episode6**: Card provider integration for card creation, activation, transaction authorization
-  - **Payment Platform**: Transfer creation, fund reservation, settlement
-  - **Authentication Service**: Customer authentication and session management
-  - **Customer Service**: Customer profile and KYC data retrieval
-  - **AML Service**: Anti-money laundering checks and transaction monitoring
-  - **Anti-Fraud Service**: Fraud detection and risk scoring
-  - **Notification Service**: Push notifications for card events
-  - **Visa Network**: VSS settlement reports, dual-message transaction flow
-  - **MyDebit Network**: Single-message transaction clearing and settlement
-  - **SAN Network**: Local debit network transaction processing
-  - **Google Pay**: Wallet token provisioning and lifecycle management
-  - **Apple Pay**: Wallet token provisioning and push notifications
+- **External Services Integration**: Typical service integrations:
+  - Provider API for account and transaction lifecycle actions
+  - Payment or transfer platform for fund reservation and settlement
+  - Authentication service for user/session validation
+  - Customer profile service for identity and eligibility data
+  - AML and anti-fraud services for risk controls
+  - Notification service for lifecycle events
+  - Payment network or external system integrations where required
 - **Event Publishing**: Kafka event publishing via outbox pattern:
   - Event entities in `EventOutbox` table
   - Background polling for reliable event delivery
   - Avro serialization with schema registry
   - Event headers with correlation IDs and trace context
-  - Domain events: `CardCreated`, `TransactionCleared`, `TransactionFinalised`, `CardStatusUpdated`, etc.
+  - Domain events: `AccountCreated`, `TransactionProcessed`, `TransactionFinalised`, `AccountStatusUpdated`, etc.
 - **Service Boundaries**: Proper API design:
   - REST endpoints following OpenAPI 3.0 specification
   - Request/Response DTOs with validation annotations
@@ -236,19 +210,19 @@ Structure your review output as:
   - Fallback mechanisms for non-critical services
   - Bulkhead pattern for resource isolation
 
-### Card Service Observability Configuration
+### Observability Configuration
 
 - **Metrics**: Micrometer and Prometheus configuration:
-  - Custom metrics for card operations (card.created, card.activated, card.suspended)
+  - Custom metrics for account operations (account.created, account.activated, account.suspended)
   - Transaction metrics (transaction.authorized, transaction.cleared, transaction.declined)
   - Settlement metrics (settlement.reconciled, settlement.mismatch)
-  - External service call metrics (episode6.latency, payment.latency)
+  - External service call metrics (provider.latency, payment.latency)
   - JVM and system metrics (heap, threads, CPU)
 - **Tracing**: OpenTelemetry span instrumentation:
   - `@WithSpan` annotation on service methods
-  - Span attributes defined in `com.ytl.card.observability.key.SpanAttributeKeys`
+  - Span attributes defined in your observability package (for example `com.examples.deposit.observability.key.SpanAttributeKeys`)
   - Span events for business milestones
-  - Non-PII data only (UUIDs, statuses, counts, last 4 digits of PAN)
+  - Non-PII data only (UUIDs, statuses, counts, last 4 digits of sensitive identifiers where applicable)
   - Distributed tracing across service boundaries
   - Correlation ID propagation in Kafka events
 - **Health Checks**: Spring Boot Actuator endpoints:
@@ -259,34 +233,32 @@ Structure your review output as:
 - **Logging**: Structured logging with sensitive data protection:
   - Logback configuration with JSON formatting
   - Log levels per package (INFO for business logic, DEBUG for troubleshooting)
-  - **NEVER log PII**: No card numbers, customer names, emails, addresses
+  - **NEVER log PII**: No account numbers, customer names, emails, addresses
   - Log only non-PII identifiers: UUIDs, correlation IDs, status codes
   - Proper exception logging without sensitive data exposure
   - Request/Response logging with sanitization
 
 ## Enhanced Security Validation
 
-### Card Service Authentication & Authorization
+### Authentication & Authorization
 
 - **Scope-Based Access**: `@ScopeCheck` annotation implementation and coverage:
-  - Customer scope validation for card operations
-  - Card account ownership verification
+  - Customer scope validation for account operations
+  - Account ownership verification
   - Admin scopes for internal operations
-  - Proper scope definitions in `com.ytl.card.domain.constant.Scope`
+  - Proper scope definitions in your domain constants package
 - **Session Management**: Secure session creation, validation, and lifecycle:
   - Integration with Authentication Service
   - Session token validation and expiration
   - Proper session cleanup on logout
   - Concurrent session handling
-- **Card-Specific Authentication**: Card security mechanisms:
-  - CVV validation for sensitive operations
-  - PIN verification for ATM transactions
-  - 3D Secure authentication for online payments
-  - Card status checks before authorization
-  - Cardholder verification methods (CVM)
+- **Domain-Specific Authentication**: service security mechanisms:
+  - Step-up authentication for sensitive operations
+  - Account status checks before authorization
+  - Strong credential/session verification for critical flows
 - **Authorization Flows**: Access control and permission verification:
-  - Customer-to-card relationship validation
-  - Card operation permissions (activate, suspend, view details)
+  - Customer-to-account relationship validation
+  - Account operation permissions (activate, suspend, view details)
   - Transaction authorization rules
   - Administrative override controls
 - **Token Security**: JWT handling for API authentication:
@@ -295,16 +267,13 @@ Structure your review output as:
   - Token revocation mechanisms
   - Secure token storage
 
-### Card Service Data Protection & Privacy
+### Data Protection & Privacy
 
-- **Sensitive Card Data**: Card-specific PII handling:
-  - **PAN (Primary Account Number)**: Encrypted at rest, masked in logs, only last 4 digits visible
-  - **CVV**: Never stored, validated and discarded immediately
-  - **Card PIN**: Hashed with strong algorithms, never logged or exposed
-  - **Card Token**: Encrypted storage, secure transmission to wallet providers
-  - **Cardholder Name**: PII protection, encrypted in database
-  - **Expiry Date**: Protected in combination with PAN
-  - **Track Data**: Never stored, immediate discard after processing
+- **Sensitive Financial Data**: domain-specific handling:
+  - Account identifiers and external references: encrypted at rest, masked in logs
+  - Authentication factors/secrets: never stored in retrievable form
+  - Provider tokens: encrypted storage and secure transmission
+  - Personal profile data: protected under strict access controls
 - **Customer PII Protection**:
   - Customer names, emails, phone numbers - never logged
   - Addresses and postal codes - encrypted at rest
@@ -316,69 +285,66 @@ Structure your review output as:
   - Settlement amounts - aggregated reporting only
   - Fee structures - business confidential data
 - **Data Classification**: Proper handling based on sensitivity:
-  - **Critical**: PAN, CVV, PIN, card tokens
+  - **Critical**: authentication secrets, provider tokens, cryptographic keys
   - **High**: Customer PII, transaction details
-  - **Medium**: Card metadata, transaction metadata
-  - **Low**: Card program details, fee structures
+  - **Medium**: Account metadata, transaction metadata
+  - **Low**: Product details, fee structures
 - **Data Minimization**: Only collect and process necessary data:
-  - Minimal PAN exposure (tokenization preferred)
-  - CVV not stored, only validated
-  - Temporary data purged after processing
+  - Minimal exposure of sensitive financial identifiers
+  - Secrets not stored in plaintext, temporary data purged after processing
 - **Data Retention**: Proper lifecycle management:
-  - Transaction records per regulatory requirements (7 years)
-  - Card data retention policies
+  - Transaction records per applicable regulatory retention policy
+  - Account and transaction data retention policies
   - Secure deletion when retention period expires
   - Audit logs for compliance
 
-### Card Service Security Controls
+### Security Controls
 
 - **Rate Limiting**: Prevent abuse through proper rate limiting:
-  - Card creation rate limits per customer
+  - Account creation rate limits per customer
   - Transaction authorization rate limits
   - API endpoint rate limiting (per customer, per IP)
-  - Brute force protection for PIN/CVV validation
+  - Brute force protection for authentication validation
 - **Access Controls**: Rate limiting and attempt limiting mechanisms:
-  - Failed PIN attempt limiting (lock after N attempts)
-  - Failed CVV validation limiting
+  - Failed authentication attempt limiting (lock after N attempts)
   - Suspicious activity detection and blocking
-  - Card operation cooldown periods
+  - Account operation cooldown periods
 - **Security Policies**: Progressive security policies:
-  - Card suspension after multiple failed attempts
-  - Automatic card blocking on fraud detection
+  - Account suspension after multiple failed attempts
+  - Automatic account blocking on fraud detection
   - Step-up authentication for high-risk operations
   - Recovery mechanisms for legitimate users
-- **Card Security Validations**:
-  - Card status validation before all operations
-  - Card-to-customer relationship validation
-  - Card expiry validation
-  - Card network-specific validations
-  - Transaction amount limits per card program
+- **Domain Security Validations**:
+  - Account status validation before all operations
+  - Account-to-customer relationship validation
+  - External system constraints validation
+  - Transaction amount limits per product configuration
 - **Risk Prevention**: Integration with risk services:
-  - AML screening for card creation
+  - AML screening for account creation
   - Anti-fraud checks for transactions
   - Velocity checks for transaction patterns
   - Geographic risk assessment
   - Device fingerprinting and behavioral analysis
 
-### Card Service Cryptographic Security
+### Cryptographic Security
 
-- **Encryption Standards**: Strong encryption for card data:
-  - AES-256 for PAN encryption at rest
+- **Encryption Standards**: Strong encryption for sensitive financial data:
+  - AES-256 for encryption of sensitive financial identifiers at rest
   - RSA-2048 or higher for key exchange
   - TLS 1.2+ for data in transit
   - HSM (Hardware Security Module) for key storage
 - **Key Management**: Proper key lifecycle:
   - Separate keys per environment (dev, staging, prod)
-  - Key rotation policies (quarterly for card data)
+  - Key rotation policies (regularly scheduled for sensitive data)
   - Secure key storage (AWS KMS, Azure Key Vault)
   - Key access controls and audit logging
 - **Hashing**: Secure hashing for sensitive data:
-  - bcrypt or Argon2 for PIN hashing (min cost factor 10)
+  - bcrypt or Argon2 for credential hashing (min cost factor 10)
   - SHA-256 for data integrity validation
   - HMAC for message authentication
   - Salt generation for each hash
 - **Digital Signatures**: Message integrity:
-  - ISO 8583 message authentication codes (MAC)
+  - Message authentication codes (MAC)
   - API request signing for external services
   - Event payload integrity validation
   - Certificate-based authentication for wallets
@@ -388,13 +354,13 @@ Structure your review output as:
   - Proper certificate validation
   - Cipher suite restrictions (no weak ciphers)
 
-### Card Service Input Validation & Sanitization
+### Input Validation & Sanitization
 
 - **Request Validation**: Proper input validation on all endpoints:
   - `@Valid` and `@Validated` annotations on DTOs
   - JSR-303 Bean Validation constraints (@NotNull, @NotBlank, @Size, @Pattern)
-  - Custom validators for card-specific fields (PAN, CVV, expiry date)
-  - Card program-specific validation rules
+  - Custom validators for domain-specific financial fields
+  - Product/program-specific validation rules
   - Transaction amount validation (min/max, decimal precision)
 - **SQL Injection**: Parameterized queries and ORM usage:
   - JPA/Hibernate for all database access (no raw SQL in business logic)
@@ -410,35 +376,32 @@ Structure your review output as:
   - Stateless JWT-based authentication
   - No cookie-based sessions
   - Origin validation for sensitive operations
-- **Card Data Validation**: Card-specific input validation:
-  - Luhn algorithm validation for PAN
-  - CVV length validation (3 or 4 digits based on network)
-  - Expiry date format and future date validation
-  - Card network identification (BIN validation)
-  - ISO 8583 message field validation
+- **Domain Data Validation**: financial input validation:
+  - Identifier format validation
+  - Amount format and precision validation
+  - Date format and future/past boundary validation
+  - External-system field validation rules
 
-### Card Service External Integration Security
+### External Integration Security
 
 - **Service Authentication**: Secure service-to-service communication:
-  - Mutual TLS (mTLS) for critical services (Episode6, Payment Platform)
+  - Mutual TLS (mTLS) for critical services (provider APIs, payment platforms)
   - API keys for internal services with rotation policies
   - JWT tokens for authentication services
   - Service accounts with least privilege
-- **Episode6 Integration Security**:
-  - API key authentication with secure storage
+- **External Provider Security**:
+  - API key or certificate authentication with secure storage
   - Request signing for sensitive operations
-  - IP whitelisting for Episode6 callbacks
+  - Callback endpoint allowlisting and signature validation
   - Certificate validation for webhooks
 - **Payment Network Security**:
-  - ISO 8583 message authentication codes
+  - Message authentication controls
   - Encryption of sensitive fields in network messages
   - Secure key exchange protocols
-  - Network-specific security requirements (Visa, MyDebit, SAN)
-- **Digital Wallet Security**:
-  - Google Pay/Apple Pay certificate validation
+- **Wallet or Token Provider Security**:
+  - Provider certificate validation
   - Token provisioning authentication
-  - Secure push notification channels
-  - Token-to-card mapping encryption
+  - Secure push/callback channels
 - **API Security**: External API protection:
   - Rate limiting per API key/customer
   - Request throttling for high-volume endpoints
@@ -455,47 +418,45 @@ Structure your review output as:
   - Dependency vulnerability scanning (OWASP Dependency-Check)
   - Timely patching of security vulnerabilities
 
-## Card Service Business Domain Standards
+## Business Domain Standards
 
 - **Audit Trail**: Proper event logging for compliance:
-  - All card lifecycle events (created, activated, suspended, cancelled)
+  - All account lifecycle events (created, activated, suspended, closed)
   - All transaction events (authorized, cleared, declined, reversed)
   - Settlement reconciliation events
   - Security events (failed authentication, suspicious activity)
   - Administrative actions with actor tracking
   - Immutable event history via Kafka topics
-- **Financial Accuracy**: Critical for card service:
+- **Financial Accuracy**: Critical for this microservice:
   - Decimal precision for monetary amounts (BigDecimal, no float/double)
   - Currency handling with proper ISO 4217 currency codes
   - Exchange rate precision and rounding rules
   - Fee calculation accuracy
   - Settlement reconciliation accuracy
   - Transaction amount matching between authorization and clearing
-- **Regulatory Compliance**: Card network and financial regulations:
-  - PCI DSS compliance for card data handling
-  - Payment network rules (Visa, MyDebit, SAN)
+- **Regulatory Compliance**: Financial regulations:
+  - PCI DSS compliance for payment data handling where applicable
+  - Payment network or external-system rules (as applicable)
   - Anti-money laundering (AML) regulations
   - Know Your Customer (KYC) requirements
   - Data privacy regulations (GDPR, PDPA)
   - Financial transaction reporting requirements
-- **Card Network Compliance**: Network-specific rules:
-  - Visa transaction processing rules
-  - MyDebit/MEPS compliance
-  - SAN network requirements
+- **Network Compliance**: Network-specific rules where applicable:
+  - Transaction processing and reconciliation rules
   - Settlement timing requirements (T+0, T+1, T+2)
   - Chargeback and dispute handling procedures
 - **Data Privacy**: Financial data protection:
-  - PAN encryption and tokenization
+  - Sensitive identifier encryption and tokenization
   - Customer PII protection
   - Right to be forgotten implementation
   - Data breach notification procedures
   - Privacy impact assessments
 - **Security Controls**: FinTech-specific security:
-  - Card fraud prevention measures
+  - Fraud prevention measures
   - Transaction monitoring and alerts
   - Velocity checks and spending limits
-  - Cardholder authentication requirements
-  - Secure card delivery and activation
+  - Customer authentication requirements
+  - Secure provisioning and activation
 - **Risk Management**: Financial risk controls:
   - Transaction risk scoring
   - Fraud detection integration
@@ -533,11 +494,9 @@ You must be thorough but practical, focusing on issues that genuinely impact sec
 
 ## References
 
-- `@ARCHITECTURE.md` - System architecture, domain model, and event-driven patterns
 - `@.github/instructions/pii-protection.instructions.md` - PII protection guidelines (critical for financial data)
 - `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 21 coding standards and Spring Boot patterns
 - `@.github/instructions/api-design-patterns.instructions.md` - REST API design and OpenAPI documentation
 - `@.github/instructions/database-jpa-patterns.instructions.md` - JPA entity design and repository patterns
 - `@.github/instructions/event-driven-patterns.instructions.md` - Event publishing via outbox pattern
-- `@.github/instructions/testing-patterns.instructions.md` - Spock Framework testing patterns
 - `@.github/instructions/configuration-patterns.instructions.md` - Spring configuration and profile management

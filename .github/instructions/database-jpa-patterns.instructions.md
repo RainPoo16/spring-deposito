@@ -4,9 +4,9 @@ description: 'JPA entity design, repository patterns, UUID v7 usage, keyset pagi
 applyTo: '**/repository/**/*.java, **/domain/**/*.java, **/*Repository.java, **/*Entity.java, **/db/migration/**/*.sql'
 ---
 
-# Database and JPA Patterns (Card Service)
+# Database and JPA Patterns
 
-> **Based on Actual Implementation**: These JPA and database patterns are used throughout the Card Service. Examples use Card, CardAccount, CardToken, and related entities from `src/main/java/com/ytl/card/domain/` and repositories from `src/main/java/com/ytl/card/repository/`.
+> **Based on Actual Implementation**: These patterns reflect established conventions for Spring Boot microservices. Examples use this repository's structure for illustration.
 
 ## Core Principles
 
@@ -18,12 +18,12 @@ applyTo: '**/repository/**/*.java, **/domain/**/*.java, **/*Repository.java, **/
 
 ## PII Protection
 
-All PII protection rules from `@.github/instructions/pii-protection.instructions.md` apply. Never log customer names, card numbers, tokens, or credentials. Only log UUIDs, correlation IDs, status codes, and system-generated metadata.
+All PII protection rules from `@.github/instructions/pii-protection.instructions.md` apply. Never log customer names, account numbers, tokens, or credentials. Only log UUIDs, correlation IDs, status codes, and system-generated metadata.
 
 ## JPA Entity Design
 
 ### Entity Classes
-- Annotate domain aggregates with `@Entity` and explicit `@Table(name = "card_account")` etc.
+- Annotate domain aggregates with `@Entity` and explicit `@Table(name = "account")` etc.
 - Implement `equals()` / `hashCode()` using immutable business keys when available; fall back to primary key only after persistence
 - Primary key strategy: use UUID v7 (monotonic, time-ordered) to improve index locality and enable efficient keyset pagination
 - UUID v7 Generation: we generate identifiers explicitly (not via JPA generator) using `com.github.f4b6a3.uuid.alt.GUID.v7().toUUID()` before persisting. Never mix auto generation and manual assignment for the same entity.
@@ -32,17 +32,17 @@ All PII protection rules from `@.github/instructions/pii-protection.instructions
 import static com.github.f4b6a3.uuid.alt.GUID.v7;
 
 @Entity
-@Table(name = "card_account")
-public class CardAccount {
+@Table(name = "account")
+public class Account {
     @Id
     private UUID id;
 
-    public static CardAccount createNew(UUID customerId, CardAccountStatus status) {
-        CardAccount ca = new CardAccount();
-        ca.id = v7().toUUID(); // Monotonic UUID improves keyset pagination performance
-        ca.customerId = customerId;
-        ca.status = status;
-        return ca;
+    public static Account createNew(UUID customerId, AccountStatus status) {
+        Account account = new Account();
+        account.id = v7().toUUID(); // Monotonic UUID improves keyset pagination performance
+        account.customerId = customerId;
+        account.status = status;
+        return account;
     }
 }
 ```
@@ -66,31 +66,31 @@ public class CardAccount {
 **✅ Correct Pattern**:
 ```java
 @Entity
-@Table(name = "card_account")
-public class CardAccount {
+@Table(name = "account")
+public class Account {
     @Id
     private UUID id;
 
     @Enumerated(EnumType.STRING) // REQUIRED
     @Column(name = "status", nullable = false)
-    private CardAccountStatus status;
+    private AccountStatus status;
 }
 ```
 
 **❌ Never Use ORDINAL** (implicit default if `@Enumerated` omitted):
 ```java
 @Entity
-public class CardAccount {
-    private CardAccountStatus status; // WRONG: defaults to ORDINAL
+public class Account {
+    private AccountStatus status; // WRONG: defaults to ORDINAL
     
     @Enumerated(EnumType.ORDINAL) // WRONG: explicit ordinal is fragile
-    private CardAccountStatus status;
+    private AccountStatus status;
 }
 ```
 
 **Enum Definition Example**:
 ```java
-public enum CardAccountStatus {
+public enum AccountStatus {
     PENDING,    // Stored as 'PENDING' in database
     ACTIVE,     // Stored as 'ACTIVE' in database
     SUSPENDED,  // Stored as 'SUSPENDED' in database
@@ -100,7 +100,7 @@ public enum CardAccountStatus {
 
 **Database Schema**:
 ```sql
-CREATE TABLE card_account (
+CREATE TABLE account (
     id UUID PRIMARY KEY,
     status VARCHAR(50) NOT NULL,  -- Stores 'ACTIVE', 'PENDING', etc.
     customer_id UUID NOT NULL
@@ -110,7 +110,7 @@ CREATE TABLE card_account (
 **Migration Safety Example**:
 ```java
 // Adding new enum value is safe with STRING
-public enum CardAccountStatus {
+public enum AccountStatus {
     PENDING,
     ACTIVE,
     SUSPENDED,
@@ -124,14 +124,14 @@ public enum CardAccountStatus {
 ### Example Entity Pattern
 ```java
 @Entity
-@Table(name = "card_account")
-public class CardAccount {
+@Table(name = "account")
+public class Account {
     @Id
     private UUID id;
 
     @Enumerated(EnumType.STRING) // Always required for enums
     @Column(name = "status", nullable = false)
-    private CardAccountStatus status;
+    private AccountStatus status;
 
     @Column(name = "customer_id", nullable = false)
     private UUID customerId;
@@ -155,12 +155,12 @@ public class CardAccount {
 
 ### Example Repository Pattern
 ```java
-public interface CardAccountRepository extends JpaRepository<CardAccount, UUID> {
-    List<CardAccount> findByCustomerId(UUID customerId);
-    List<CardAccount> findByCustomerIdAndStatus(UUID customerId, CardAccountStatus status);
+public interface AccountRepository extends JpaRepository<Account, UUID> {
+    List<Account> findByCustomerId(UUID customerId);
+    List<Account> findByCustomerIdAndStatus(UUID customerId, AccountStatus status);
 
-    @Query(value = "SELECT * FROM card_account c WHERE c.id = :id FOR UPDATE", nativeQuery = true)
-    Optional<CardAccount> findByIdForUpdate(UUID id);
+    @Query(value = "SELECT * FROM account a WHERE a.id = :id FOR UPDATE", nativeQuery = true)
+    Optional<Account> findByIdForUpdate(UUID id);
 }
 ```
 
@@ -169,14 +169,14 @@ public interface CardAccountRepository extends JpaRepository<CardAccount, UUID> 
 ### Dynamic Filtering with Pagination
 - Build composite `Specification<T>` in services for endpoints supporting multiple optional filters + pagination
 - Start with `Specification.where(null)` then chain `.and(condition)` only when parameter non-null
-- Keep each specification method tiny & single-responsibility; put them in `*Specification` class inside repository package (e.g. `SanFraudulentTransactionSpecification`)
+- Keep each specification method tiny & single-responsibility; put them in `*Specification` class inside repository package (e.g. `TransactionRiskSpecification`)
 - For pageable queries: call repository method like `findAll(spec, pageable)` (provided by `JpaSpecificationExecutor`) or custom signature returning `Page<T>`
 - Favor `Page<T>` when total count is needed; use `Slice<T>` for performance when only next existence required
 - Ensure criteria builder uses indexed columns for predicates; add indexes in migrations accordingly
 
 ### Example Specification Methods
 ```java
-public static Specification<SanFraudulentTransaction> hasCustomerId(UUID customerId) {
+public static Specification<Transaction> hasCustomerId(UUID customerId) {
     return (root, query, cb) -> customerId == null ? cb.conjunction() : cb.equal(root.get("customerId"), customerId);
 }
 ```
@@ -198,23 +198,23 @@ public static Specification<SanFraudulentTransaction> hasCustomerId(UUID custome
 - Store `lastId` from previous batch; skip gaps naturally
 - Recommended batch size: 1000 (tune based on row size & network throughput)
 
-#### Example Keyset Query (CardAccount Backfill)
+#### Example Keyset Query (Account Backfill)
 ```java
 @Query(value = """
-        SELECT ca.fund_option_id, ca.id
-        FROM card_account ca
-        WHERE ca.fund_option_type IS NULL
-          AND ca.fund_option_id IS NOT NULL
-          AND ca.id > :lastId
-        ORDER BY ca.id ASC
+                SELECT a.external_reference, a.id
+                FROM account a
+                WHERE a.category IS NULL
+                    AND a.external_reference IS NOT NULL
+                    AND a.id > :lastId
+                ORDER BY a.id ASC
         LIMIT :limit
         """, nativeQuery = true)
-List<Object[]> findRecordsWithNullFundOptionTypeAfter(UUID lastId, int limit);
+List<Object[]> findRecordsWithNullCategoryAfter(UUID lastId, int limit);
 ```
 Guidelines:
 - First batch: pass minimal UUID (or use `00000000-0000-0000-0000-000000000000` sentinel) or a query variant without `id > :lastId`
-- Convert `Object[]` to typed projection (create record: `record FundOptionBackfill(UUID fundOptionId, UUID id)` for readability)
-- Ensure index exists on `card_account(id)` (primary key implicitly covers)
+- Convert `Object[]` to typed projection (create record: `record AccountBackfill(String externalReference, UUID id)` for readability)
+- Ensure index exists on `account(id)` (primary key implicitly covers)
 
 ### Choosing Strategy
 | Use Case | Strategy | Notes |
@@ -233,11 +233,11 @@ Guidelines:
 
 ### Examples
 ```java
-@Query(value = "SELECT * FROM card_account c WHERE c.id = :id FOR UPDATE", nativeQuery = true)
-Optional<CardAccount> findByIdForUpdate(UUID id);
+@Query(value = "SELECT * FROM account a WHERE a.id = :id FOR UPDATE", nativeQuery = true)
+Optional<Account> findByIdForUpdate(UUID id);
 
-@Query(value = "SELECT * FROM visa_settlement_reconciliation WHERE id = :id FOR UPDATE SKIP LOCKED", nativeQuery = true)
-Optional<VisaSettlementReconciliation> findByIdForUpdateSkipLocked(UUID id);
+@Query(value = "SELECT * FROM settlement_reconciliation WHERE id = :id FOR UPDATE SKIP LOCKED", nativeQuery = true)
+Optional<SettlementReconciliation> findByIdForUpdateSkipLocked(UUID id);
 ```
 
 ### Guidelines
@@ -257,12 +257,12 @@ Optional<VisaSettlementReconciliation> findByIdForUpdateSkipLocked(UUID id);
 - Use `readOnly = true` for pure fetch + transform operations (no flush, slightly improved performance)
 - Use `@Transactional(rollbackFor = Exception.class)` where lazy loaded associations may be traversed to ensure any unexpected runtime exception triggers rollback (and for broader safety in complex workflows)
 - For backfill: wrap each batch in its own transaction to reduce long-held locks & memory
-  - Pseudocode (see `BackfillCardAccountTask`):
+    - Pseudocode (see your backfill task implementation):
   ```java
   UUID lastId = UUID.fromString("00000000-0000-0000-0000-000000000000");
   while (true) {
-      List<FundOptionBackfill> batch = repo.findRecordsWithNullFundOptionTypeAfter(lastId, 1000)
-          .stream().map(r -> new FundOptionBackfill((UUID) r[0], (UUID) r[1])).toList();
+      List<AccountBackfill> batch = repo.findRecordsWithNullCategoryAfter(lastId, 1000)
+          .stream().map(r -> new AccountBackfill((String) r[0], (UUID) r[1])).toList();
       if (batch.isEmpty()) break;
       transactionTemplate.execute(status -> {
           batch.forEach(row -> process(row));
@@ -306,12 +306,11 @@ Optional<VisaSettlementReconciliation> findByIdForUpdateSkipLocked(UUID id);
 **Table Creation with Comments:**
 
 ```sql
--- Stores Visa card transaction data from ISO 8583 messages
-CREATE TABLE IF NOT EXISTS visa_card_transaction (
+-- Stores financial transaction data processed by the service
+CREATE TABLE IF NOT EXISTS transaction (
     id UUID NOT NULL PRIMARY KEY,
-    pan TEXT NOT NULL,
-    token_requestor_id TEXT,
-    token_type TEXT,
+    account_id UUID NOT NULL,
+    transaction_type TEXT NOT NULL,
     transaction_amount DECIMAL(19, 4) NOT NULL,
     transaction_currency TEXT NOT NULL,
     settlement_status TEXT NOT NULL,
@@ -323,8 +322,8 @@ CREATE TABLE IF NOT EXISTS visa_card_transaction (
 **Adding Columns:**
 
 ```sql
--- Add Air Waybill tracking for physical card delivery
-ALTER TABLE card_account
+-- Add tracking fields for physical delivery workflows
+ALTER TABLE account
     ADD COLUMN awb_number TEXT,  -- Courier tracking number
     ADD COLUMN awb_courier TEXT;  -- Courier service provider (e.g., DHL, FedEx)
 ```
@@ -332,13 +331,13 @@ ALTER TABLE card_account
 **Creating Indexes:**
 
 ```sql
--- Index for keyset pagination on settlement reconciliation queries
-CREATE INDEX IF NOT EXISTS idx_visa_settlement_recon_id 
-    ON visa_settlement_reconciliation(id);
+-- Index for keyset pagination on reconciliation queries
+CREATE INDEX IF NOT EXISTS idx_settlement_recon_id 
+    ON settlement_reconciliation(id);
 
 -- Composite index for customer transaction history lookups
-CREATE INDEX IF NOT EXISTS idx_visa_card_txn_customer_created 
-    ON visa_card_transaction(customer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_transaction_customer_created 
+    ON transaction(customer_id, created_at DESC);
 ```
 
 #### Anti-Patterns (Avoid These)
@@ -347,17 +346,17 @@ CREATE INDEX IF NOT EXISTS idx_visa_card_txn_customer_created
 
 ```sql
 -- BAD: Adds database metadata overhead
-COMMENT ON COLUMN visa_card_transaction.token_requestor_id 
-    IS 'Stores the raw token requestor ID from ISO 8583 field 123 (tag 03).';
+COMMENT ON COLUMN transaction.reference_id 
+    IS 'Stores the external reference identifier from the upstream provider.';
 ```
 
 ✅ **Use inline comments instead:**
 
 ```sql
 -- GOOD: Simple, readable, no database overhead
-ALTER TABLE visa_card_transaction
-    -- ISO 8583 field 123, tag 03: Token requestor identifier for digital wallets
-    ADD COLUMN token_requestor_id TEXT;
+ALTER TABLE transaction
+    -- External reference identifier from upstream provider
+    ADD COLUMN reference_id TEXT;
 ```
 
 #### Migration File Naming
@@ -404,88 +403,88 @@ Database migrations containing unsafe SQL statements pose significant risks to p
 ❌ **Foreign Key Constraints without NOT VALID**
 ```sql
 -- UNSAFE: Requires full table scan with exclusive lock
-ALTER TABLE card_account ADD CONSTRAINT fk_customer 
+ALTER TABLE account ADD CONSTRAINT fk_customer 
     FOREIGN KEY (customer_id) REFERENCES customer(id);
 ```
 
 ✅ **Safe Pattern: Add constraint as NOT VALID, then validate separately**
 ```sql
 -- Step 1: Add constraint without validation (fast, minimal lock)
-ALTER TABLE card_account ADD CONSTRAINT fk_customer 
+ALTER TABLE account ADD CONSTRAINT fk_customer 
     FOREIGN KEY (customer_id) REFERENCES customer(id) NOT VALID;
 
 -- Step 2: Validate in separate migration (allows concurrent reads/writes)
-ALTER TABLE card_account VALIDATE CONSTRAINT fk_customer;
+ALTER TABLE account VALIDATE CONSTRAINT fk_customer;
 ```
 
 ❌ **Index Creation without CONCURRENTLY**
 ```sql
 -- UNSAFE: Blocks all writes to the table
-CREATE INDEX idx_customer_id ON card_account(customer_id);
+CREATE INDEX idx_customer_id ON account(customer_id);
 ```
 
 ✅ **Safe Pattern: Use CONCURRENTLY**
 ```sql
 -- Safe: Allows concurrent writes (takes longer but non-blocking)
-CREATE INDEX CONCURRENTLY idx_customer_id ON card_account(customer_id);
+CREATE INDEX CONCURRENTLY idx_customer_id ON account(customer_id);
 ```
 
 ❌ **Unique Constraints without NOT VALID**
 ```sql
 -- UNSAFE: Validates all rows with table lock
-ALTER TABLE card_account ADD CONSTRAINT uk_card_number UNIQUE (card_number);
+ALTER TABLE account ADD CONSTRAINT uk_account_number UNIQUE (account_number);
 ```
 
 ✅ **Safe Pattern: Create unique index concurrently, then constraint**
 ```sql
 -- Step 1: Create unique index concurrently
-CREATE UNIQUE INDEX CONCURRENTLY uk_card_number ON card_account(card_number);
+CREATE UNIQUE INDEX CONCURRENTLY uk_account_number ON account(account_number);
 
 -- Step 2: Add constraint using existing index (fast)
-ALTER TABLE card_account ADD CONSTRAINT uk_card_number UNIQUE USING INDEX uk_card_number;
+ALTER TABLE account ADD CONSTRAINT uk_account_number UNIQUE USING INDEX uk_account_number;
 ```
 
 ❌ **Column Type Changes**
 ```sql
 -- UNSAFE: Rewrites entire table with exclusive lock
-ALTER TABLE card_account ALTER COLUMN status TYPE VARCHAR(50);
+ALTER TABLE account ALTER COLUMN status TYPE VARCHAR(50);
 ```
 
 ✅ **Safe Pattern: Multi-step migration for type changes**
 ```sql
 -- Step 1: Add new column
-ALTER TABLE card_account ADD COLUMN status_new VARCHAR(50);
+ALTER TABLE account ADD COLUMN status_new VARCHAR(50);
 
 -- Step 2: Backfill data in batches (application code or manual script)
--- UPDATE card_account SET status_new = status::VARCHAR WHERE id > :lastId LIMIT 1000;
+-- UPDATE account SET status_new = status::VARCHAR WHERE id > :lastId LIMIT 1000;
 
 -- Step 3: Switch application to use new column (deploy code change)
 
 -- Step 4: Drop old column (in later migration after verification)
-ALTER TABLE card_account DROP COLUMN status;
-ALTER TABLE card_account RENAME COLUMN status_new TO status;
+ALTER TABLE account DROP COLUMN status;
+ALTER TABLE account RENAME COLUMN status_new TO status;
 ```
 
 ❌ **Adding NOT NULL Constraints Directly**
 ```sql
 -- UNSAFE: Full table scan to validate, may lock table
-ALTER TABLE card_account ALTER COLUMN customer_id SET NOT NULL;
+ALTER TABLE account ALTER COLUMN customer_id SET NOT NULL;
 ```
 
 ✅ **Safe Pattern: Add CHECK constraint first, then NOT NULL**
 ```sql
 -- Step 1: Add CHECK constraint as NOT VALID (fast)
-ALTER TABLE card_account ADD CONSTRAINT chk_customer_id_not_null 
+ALTER TABLE account ADD CONSTRAINT chk_customer_id_not_null 
     CHECK (customer_id IS NOT NULL) NOT VALID;
 
 -- Step 2: Validate constraint (allows reads/writes)
-ALTER TABLE card_account VALIDATE CONSTRAINT chk_customer_id_not_null;
+ALTER TABLE account VALIDATE CONSTRAINT chk_customer_id_not_null;
 
 -- Step 3: Add NOT NULL (PostgreSQL recognizes existing CHECK, fast operation)
-ALTER TABLE card_account ALTER COLUMN customer_id SET NOT NULL;
+ALTER TABLE account ALTER COLUMN customer_id SET NOT NULL;
 
 -- Step 4: Drop redundant CHECK constraint
-ALTER TABLE card_account DROP CONSTRAINT chk_customer_id_not_null;
+ALTER TABLE account DROP CONSTRAINT chk_customer_id_not_null;
 ```
 
 ❌ **Other Dangerous Operations**
@@ -524,16 +523,16 @@ All migration PRs must include:
 
 #### Example Safe Migration Header
 ```sql
--- V1.28__add_customer_id_index_for_card_account_filtering.sql
--- Purpose: Support CardAccountSpecification.hasCustomerId() filtering performance
--- Impact: Non-blocking index creation on card_account (~5M rows, ~3-5 min)
--- Tables: card_account (SHARE UPDATE EXCLUSIVE lock during index build, reads/writes allowed)
--- Rollback: DROP INDEX CONCURRENTLY idx_card_account_customer_id;
+-- V1.28__add_customer_id_index_for_account_filtering.sql
+-- Purpose: Support AccountSpecification.hasCustomerId() filtering performance
+-- Impact: Non-blocking index creation on account (~5M rows, ~3-5 min)
+-- Tables: account (SHARE UPDATE EXCLUSIVE lock during index build, reads/writes allowed)
+-- Rollback: DROP INDEX CONCURRENTLY idx_account_customer_id;
 -- Safe for production deployment during business hours
 ```
 
 ### Schema Management
-- Use Flyway with semantic incremental naming (e.g. `V1.21__add_card_limit_index.sql`) — prefix grows over time; keep descriptive suffix
+- Use Flyway with semantic incremental naming (e.g. `V1.21__add_account_limit_index.sql`) — prefix grows over time; keep descriptive suffix
 - Document rationale for new indexes (especially supporting keyset & filtering specs) in migration comment header
 - Add composite indexes aligning with spec predicates (e.g. `(customer_id, status)` for `findByCustomerIdAndStatus`)
 - **ALWAYS use safe migration patterns above** to prevent production outages
@@ -547,29 +546,29 @@ All migration PRs must include:
 When adding new repository methods or specification predicates, evaluate indexing needs early:
 
 1. Single-Column Query Methods
-   - Method: `findByCardId(UUID cardId)` => Ensure index on `card(card_id)` (often already primary/unique) no composite needed.
-   - Method: `findByCustomerId(UUID customerId)` => Create index on `card_account(customer_id)` if high cardinality and frequent.
+    - Method: `findByAccountId(UUID accountId)` => Ensure index on `account(account_id)` (often already primary/unique) no composite needed.
+    - Method: `findByCustomerId(UUID customerId)` => Create index on `account(customer_id)` if high cardinality and frequent.
 
 2. Evolving to Multi-Column Methods
-   - Adding `findByCardIdAndCustomerId(UUID cardId, UUID customerId)` usually DOES NOT require a new composite index if `card_id` is already highly selective (near unique). The existing `card_id` index will filter quickly then customerId predicate applies to tiny result set.
+    - Adding `findByAccountIdAndCustomerId(UUID accountId, UUID customerId)` usually DOES NOT require a new composite index if `account_id` is already highly selective (near unique). The existing `account_id` index will filter quickly then customerId predicate applies to tiny result set.
    - Create composite index only when both columns significantly reduce result size AND queries frequently filter by both with low selectivity of the leading column OR range queries / ordering rely on second column.
 
 3. Composite Index Heuristics
    - Never create composite index when leading single-column index cardinality/selectivity > ~95% uniqueness.
-   - Use composite when pattern involves frequent queries like `findByStatusAndLifecycleAndCardAccountId` and each predicate independently still yields large intermediate sets.
+    - Use composite when pattern involves frequent queries like `findByStatusAndLifecycleAndAccountId` and each predicate independently still yields large intermediate sets.
    - Keep column order: most selective first OR if queries include range condition (`BETWEEN transmission_at`) place equality predicates first, then range.
 
 4. Specification Predicates
-   - Each `root.get("field")` used in equality for frequent filters must correspond to an indexed column (see migration `V1.27__create_indexes_for_card_service.sql`).
+    - Each `root.get("field")` used in equality for frequent filters must correspond to an indexed column (see migration `V1.27__create_indexes_for_account_service.sql`).
    - Never wrap indexed columns in functions (e.g. `LOWER(field)`) unless a functional index exists; always store normalized values.
 
 5. Redundant Index Cleanup
-   - Periodically scan for composite indexes whose first column already unique (e.g. `(card_id, status)` when `card_id` unique) and drop them.
+    - Periodically scan for composite indexes whose first column already unique (e.g. `(account_id, status)` when `account_id` unique) and drop them.
    - Use `EXPLAIN (ANALYZE, BUFFERS)` to validate planner uses intended index; if planner ignores composite, reconsider necessity.
 
 6. Naming Consistency
    - Follow pattern: `idx_<table>_<columns>` in lower case separated by underscores.
-   - For multi-column descending element include direction: `(id DESC)` as seen in `idx_my_debit_card_txn_error_filtering`.
+    - For multi-column descending element include direction: `(id DESC)` as seen in `idx_account_txn_error_filtering`.
 
 7. Migration Authoring
    - Document decision in migration header comment: why new index, expected queries (method names / spec names), estimated row reduction.
@@ -580,16 +579,16 @@ When adding new repository methods or specification predicates, evaluate indexin
 
 Example Decision Flow:
 ```
-Add method findByCardId -> card_id already indexed (no action)
-Add method findByCardIdAndCustomerId -> evaluate selectivity: card_id unique, skip composite
-Add method findByStatusAndLifecycleAndCardAccountId -> existing (status, lifecycle, card_account_id) composite beneficial (see migration) to avoid multi-filter sequential scan
+Add method findByAccountId -> account_id already indexed (no action)
+Add method findByAccountIdAndCustomerId -> evaluate selectivity: account_id unique, skip composite
+Add method findByStatusAndLifecycleAndAccountId -> existing (status, lifecycle, account_id) composite beneficial (see migration) to avoid multi-filter sequential scan
 ```
 
 ## Performance & Monitoring Checklist
 1. Large filtered endpoints use specifications + indexed columns
 2. Backfill tasks adopt keyset pagination (no high OFFSET)
 3. Row locks confined to single-row operations; long-running logic executes post-commit if possible
-4. Batch size tuned (1000 default) and configurable via property if needed (`card.backfill.batch-size`)
+4. Batch size tuned (1000 default) and configurable via property if needed (`deposit.backfill.batch-size`)
 5. Avoid N+1 selects in specification queries (inspect generated SQL)
 6. Add integration tests for keyset pagination correctness (ordering, termination when empty batch)
 7. Explicit rollback semantics on complex transactional methods (`rollbackFor = Exception.class`) where appropriate
@@ -605,7 +604,6 @@ Add method findByStatusAndLifecycleAndCardAccountId -> existing (status, lifecyc
 
 ## References
 
-- `@ARCHITECTURE.md` — System architecture and domain model
-- `@.github/instructions/pagination-endpoint-design-patterns.instructions.md` — Paginated list endpoints using Specification pattern
 - `@.github/instructions/event-driven-patterns.instructions.md` — Outbox pattern and event publishing within transactions
-- `@.github/instructions/cron-task-patterns.instructions.md` — Keyset pagination for batch processing tasks
+- `@.github/instructions/java-spring-coding-standards.instructions.md` — Java and Spring coding standards for services and repositories
+- `@.github/instructions/pii-protection.instructions.md` — PII-safe entity, query, and logging practices

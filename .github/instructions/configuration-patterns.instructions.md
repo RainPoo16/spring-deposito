@@ -5,30 +5,30 @@ applyTo: '**/config/**/*.java, **/application*.properties, **/application*.yml'
 ---
 # Configuration and Profile Management
 
-> **Based on Actual Implementation**: Configuration patterns from the Card Service. See `src/main/resources/application.properties` for actual configuration and `src/main/java/com/ytl/card/config/` for configuration classes.
+> **Based on Actual Implementation**: These patterns reflect established conventions for Spring Boot microservices. Examples use this repository's structure for illustration.
 
 ## Core Principles
 
 - **Externalize all environment-specific values** — Use `${ENV_VAR:default}` pattern; never hardcode secrets or credentials
 - **Gate features with flags defaulting to disabled** — Always set `havingValue` explicitly; cover both true and false branches
-- **Scope configuration by domain** — Use short, domain-prefixed property names (e.g., `card.limit.*`, `external.e6.*`)
+- **Scope configuration by domain** — Use short, domain-prefixed property names (e.g., `deposit.limit.*`, `external.provider.*`)
 - **Isolate profiles by concern** — Use `@Profile` annotations to activate beans only in appropriate runtime contexts
 - **Remove stale flags** — Delete both conditional bean methods, property definitions, and references when a feature matures
 
 ## Spring Profiles
 
-### Active Profiles in Card Service
+### Active Profiles
 - `application-self-service`: Public/customer-facing REST APIs (Swagger enabled when flag true)
 - `application-internal`: Internal/admin & operational APIs (Swagger enabled when flag true)
-- `episode6`: External provider integration specific adjustments
-- `hitrust`: Adds Hitrust-specific signing/validation properties
+- `integration`: External provider integration adjustments
+- `security`: Adds security-specific signing/validation properties
 - `debezium`: Activates embedded Debezium outbox health contributors
 - `taskrunner`: Activates task execution components / cron overrides
 - `test`: Unit/integration test scope (avoid remote calls, use mocks)
 
 ### Profile Usage Patterns
 - Multi-profile activation: `@Profile({"application-self-service", "application-internal"})` (see `SwaggerOpenApiConfig`)
-- Exclude test-only: `@Profile("!test")` for config beans that must not be loaded during tests (e.g. external clients, OSS credentials). Note: cron tasks have different profile requirements — see `@.github/instructions/cron-task-patterns.instructions.md`
+- Exclude test-only: `@Profile("!test")` for config beans that must not be loaded during tests (e.g. external clients, OSS credentials). Note: scheduled tasks may have different profile requirements (e.g., `@Profile("taskrunner")` to restrict execution to CLI-triggered runs).
 - Per-profile property activation: use `spring.config.activate.on-profile` sections in `application.properties` for block overrides
 - Use environment variable expansion with defaults: `${VAR_NAME:default}` for resilience
 
@@ -43,7 +43,7 @@ springdoc.swagger-ui.enabled = ${SWAGGER_UI_ENABLED:false}
 
 ### Binding Strategy
 - Use `@ConfigurationProperties(prefix = "kafka")` for grouped external system settings (e.g. Kafka producers/consumers)
-- Keep prefix short & domain-scoped (`card.limit.*`, `external.e6.*`, `paynet.*`, `visa.settlement.*`)
+- Keep prefix short & domain-scoped (`deposit.limit.*`, `external.provider.*`, `settlement.*`, `network.*`)
 - Prefer one config class per logical domain; avoid massive catch-all classes
 
 ### Example
@@ -57,11 +57,11 @@ public class KafkaConfig {
 ```
 
 ## Property Naming Conventions
-- Lowercase, dot-separated: `card.limit.spending.upper-limit`
-- Boolean flags end with `.enabled`: `multi.card.replacement.enabled`
+- Lowercase, dot-separated: `deposit.limit.spending.upper-limit`
+- Boolean flags end with `.enabled`: `deposit.feature.replacement.enabled`
 - Use kebab-case for compound segments; avoid camelCase
 - Include units or context: `.timeout-ms`, `.period.days`, `.upper-limit`
-- For list values use comma-separated (e.g. `card.forex.special.currency = AUD,EUR,GBP,NZD`)
+- For list values use comma-separated (e.g. `deposit.forex.special.currency = AUD,EUR,GBP,NZD`)
 - Problem type or domain constants may use uppercase env variables when directly injected (e.g. `ALIBABA_CLOUD_ROLE_ARN` via `@ConditionalOnProperty`)
 
 ## Externalized Configuration Patterns
@@ -82,27 +82,27 @@ Used to gate non-ready or gradually released functionality without requiring cod
 4. Remove flag & conditional code after feature matures (avoid permanent flag proliferation)
 
 ### Naming
-- Prefix by domain: `card.limit.20k.enabled`, `card.visa.clearing-refund.e6.retry.enabled`
-- Use concise descriptive nouns/verbs; avoid ambiguous names (e.g. prefer `card.rpl.fund.option.enabled` over `fund.option`)
+- Prefix by domain: `deposit.limit.high-tier.enabled`, `deposit.feature.retry.enabled`
+- Use concise descriptive nouns/verbs; avoid ambiguous names (e.g. prefer `deposit.replacement.fund-option.enabled` over `fund.option`)
 - Related flags share prefix for grouping in monitoring dashboards
 
 ### Implementation Patterns
 
 #### Dual Bean Strategy
-Used when feature introduces alternative implementation (e.g. physical card replacement workflow):
+Used when feature introduces alternative implementation (e.g. account replacement workflow):
 ```java
 @Bean
-@ConditionalOnProperty(value = "multi.card.replacement.enabled", havingValue = "true")
-PhysicalCardReplacementWorkflow newPhysicalCardReplacementWorkflow(
-        CardService cardService, NotificationService notificationService) {
-    return new MultiCardReplacementWorkflow(cardService, notificationService);
+@ConditionalOnProperty(value = "deposit.feature.replacement.enabled", havingValue = "true")
+AccountReplacementWorkflow newAccountReplacementWorkflow(
+        AccountService accountService, NotificationService notificationService) {
+    return new MultiAccountReplacementWorkflow(accountService, notificationService);
 }
 
 @Bean
-@ConditionalOnProperty(value = "multi.card.replacement.enabled", havingValue = "false")
-PhysicalCardReplacementWorkflow oldPhysicalCardReplacementWorkflow(
-        CardService cardService, NotificationService notificationService) {
-    return new SingleCardReplacementWorkflow(cardService, notificationService);
+@ConditionalOnProperty(value = "deposit.feature.replacement.enabled", havingValue = "false")
+AccountReplacementWorkflow oldAccountReplacementWorkflow(
+        AccountService accountService, NotificationService notificationService) {
+    return new SingleAccountReplacementWorkflow(accountService, notificationService);
 }
 ```
 Guidelines:
@@ -114,16 +114,16 @@ Guidelines:
 Switching configuration values only:
 ```java
 @Bean
-@ConditionalOnProperty(value = "card.limit.20k.enabled", havingValue = "true")
-DefaultConfigurableSpendingLimit highLimit(@Value("${card.limit.20k.upper-limit}") BigDecimal up,
-                                           @Value("${card.limit.spending.lower-limit}") BigDecimal low) {
+@ConditionalOnProperty(value = "deposit.limit.high-tier.enabled", havingValue = "true")
+DefaultConfigurableSpendingLimit highLimit(@Value("${deposit.limit.high-tier.upper-limit}") BigDecimal up,
+                                           @Value("${deposit.limit.spending.lower-limit}") BigDecimal low) {
     return new DefaultConfigurableSpendingLimit(up, low);
 }
 
 @Bean
-@ConditionalOnProperty(value = "card.limit.20k.enabled", havingValue = "false")
-DefaultConfigurableSpendingLimit normalLimit(@Value("${card.limit.spending.upper-limit}") BigDecimal up,
-                                             @Value("${card.limit.spending.lower-limit}") BigDecimal low) {
+@ConditionalOnProperty(value = "deposit.limit.high-tier.enabled", havingValue = "false")
+DefaultConfigurableSpendingLimit normalLimit(@Value("${deposit.limit.spending.upper-limit}") BigDecimal up,
+                                             @Value("${deposit.limit.spending.lower-limit}") BigDecimal low) {
     return new DefaultConfigurableSpendingLimit(up, low);
 }
 ```
@@ -202,8 +202,8 @@ RestClient.Builder restClientBuilder() { return RestClient.builder(); }
 - Debezium outbox properties use `embedded-debezium-kafka-outbox.*` prefix for clarity
 - Enable outbox only with flag: `embedded-debezium-kafka-outbox.enabled=false` by default
 
-## Fraud & Settlement Configuration
-- Group MyDebit/SAN settlement & fraud properties with prefixes (`my.debit.*`, `san.*`, `visa.settlement.*`)
+## Domain Limits & Settlement Configuration
+- Group settlement and fraud properties with clear prefixes (`settlement.*`, `external.provider.*`, `risk.*`)
 - Threshold values include units context (e.g. `two.calendar.days.transaction.volume.threshold`)
 
 ## Testing & Mocks
@@ -226,8 +226,8 @@ RestClient.Builder restClientBuilder() { return RestClient.builder(); }
 
 ## Example Feature Flag Definition in application.properties
 ```properties
-# Card Feature Flag
-card.visa.clearing-refund.e6.retry.enabled = ${CARD_VISA_CLEARING_REFUND_E6_RETRY_ENABLED:false}
+# Service Feature Flag
+deposit.feature.retry.enabled = ${DEPOSIT_FEATURE_RETRY_ENABLED:false}
 ```
 Pattern: `<domain>.<capability>[.<sub-capability>].enabled = ${ENV_VAR:false}`
 
@@ -240,7 +240,5 @@ Pattern: `<domain>.<capability>[.<sub-capability>].enabled = ${ENV_VAR:false}`
 
 ## References
 
-- `@ARCHITECTURE.md` - System architecture and domain model
 - `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 21 coding standards and Spring Boot patterns
 - `@.github/instructions/pii-protection.instructions.md` - PII protection guidelines
-- `@.github/instructions/cron-task-patterns.instructions.md` - Scheduled task patterns and profile requirements

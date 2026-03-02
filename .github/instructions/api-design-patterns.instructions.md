@@ -6,7 +6,7 @@ applyTo: '**/controller/**/*.java, **/*Controller.java, **/service/**/*.java, **
 
 # API Design and Documentation Patterns
 
-> **Based on Actual Implementation**: This instruction file reflects REST API patterns used in `CardController` and actual service implementations. All examples are taken from existing code in `src/main/java/com/ytl/card/controller/`.
+> **Based on Actual Implementation**: These patterns reflect established conventions for Spring Boot microservices. Examples use this repository's structure for illustration.
 
 ## Core Principles
 
@@ -18,7 +18,7 @@ applyTo: '**/controller/**/*.java, **/*Controller.java, **/service/**/*.java, **
 
 ## PII Protection
 
-All PII protection rules from `@.github/instructions/pii-protection.instructions.md` apply. Never log customer names, card numbers, tokens, or credentials. Only log UUIDs, correlation IDs, status codes, and system-generated metadata.
+All PII protection rules from `@.github/instructions/pii-protection.instructions.md` apply. Never log customer names, account numbers, tokens, or credentials. Only log UUIDs, correlation IDs, status codes, and system-generated metadata.
 
 ## Observability and Span Instrumentation
 
@@ -46,7 +46,7 @@ public ReturnType methodName(UUID customerId, String param)
     Span span = Span.current();
     setMethodNameBaseSpan(span, customerId, param);
     
-    return cardService.processRequest(customerId, param);
+        return accountService.processRequest(customerId, param);
 }
 ```
 
@@ -62,17 +62,17 @@ public class SpanAttributeKeys {
         public static final String CUSTOMER_ID =
                 TraceUtils.createCommonKey(TraceNamespaceConstant.CUSTOMER_ID_KEY);
         
-        public static final String CARD_ACCOUNT_ID =
-                TraceUtils.createCardCommonKey(TraceNamespaceConstant.CARD_ACCOUNT_ID_KEY);
+        public static final String ACCOUNT_ID =
+                TraceUtils.createDomainCommonKey(TraceNamespaceConstant.ACCOUNT_ID_KEY);
         
-        public static final String CARD_ID =
-                TraceUtils.createCardCommonKey(TraceNamespaceConstant.CARD_ID_KEY);
+        public static final String TRANSACTION_ID =
+                TraceUtils.createDomainCommonKey(TraceNamespaceConstant.TRANSACTION_ID_KEY);
         
-        public static final String TOKEN_ID =
-                TraceUtils.createCardKey(ACTION_PREFIX, TraceNamespaceConstant.TOKEN_ID_KEY);
+        public static final String REQUEST_ID =
+                TraceUtils.createDomainKey(ACTION_PREFIX, TraceNamespaceConstant.REQUEST_ID_KEY);
         
-        public static final String TOKEN_STATUS =
-                TraceUtils.createCardKey(ACTION_PREFIX, TraceNamespaceConstant.TOKEN_STATUS_KEY);
+        public static final String OPERATION_STATUS =
+                TraceUtils.createDomainKey(ACTION_PREFIX, TraceNamespaceConstant.OPERATION_STATUS_KEY);
         
         // Add other relevant non-PII attributes
     }
@@ -80,10 +80,10 @@ public class SpanAttributeKeys {
 ```
 
 **Key creation patterns:**
-- `TraceUtils.createCommonKey()` - for common fields (customer_id, card_account_id, card_id)
-- `TraceUtils.createCardCommonKey()` - for card-specific common fields
-- `TraceUtils.createCardKey(ACTION_PREFIX, key)` - for method-specific card attributes
-- `TraceUtils.createE6Key()` - for Episode6-specific fields (e6_customer_number, e6_card_number)
+- `TraceUtils.createCommonKey()` - for common fields (customer_id, account_id, transaction_id)
+- `TraceUtils.createDomainCommonKey()` - for service-domain common fields
+- `TraceUtils.createDomainKey(ACTION_PREFIX, key)` - for method-specific domain attributes
+- `TraceUtils.createExternalProviderKey()` - for external-provider-specific fields when needed
 
 **4. Add constants to `/observability/constant/TraceNamespaceConstant.java` (if needed):**
 
@@ -118,30 +118,30 @@ private void setMethodNameBaseSpan(Span span, UUID customerId, String param) {
                             param)));
 }
 
-private void setMethodNameSpanEvent(Span span, CardAccount cardAccount, Card card) {
+private void setMethodNameSpanEvent(Span span, Account account, Transaction transaction) {
     TraceUtils.setSpanAttributes(
             span,
             List.of(
                     new TraceUtils.SpanAttribute(
                             SpanAttributeKeys.MethodName.CUSTOMER_ID,
                             AttributeType.STRING,
-                            cardAccount.getCustomerId()),
+                            account.getCustomerId()),
                     new TraceUtils.SpanAttribute(
-                            SpanAttributeKeys.MethodName.CARD_ACCOUNT_ID,
+                            SpanAttributeKeys.MethodName.ACCOUNT_ID,
                             AttributeType.STRING,
-                            cardAccount.getId()),
+                            account.getId()),
                     new TraceUtils.SpanAttribute(
-                            SpanAttributeKeys.MethodName.CARD_ID,
+                            SpanAttributeKeys.MethodName.TRANSACTION_ID,
                             AttributeType.STRING,
-                            card.getId()),
+                            transaction.getId()),
                     new TraceUtils.SpanAttribute(
-                            SpanAttributeKeys.MethodName.CARD_TYPE,
+                            SpanAttributeKeys.MethodName.ACCOUNT_STATUS,
                             AttributeType.STRING,
-                            card.getType()),
+                            account.getStatus()),
                     new TraceUtils.SpanAttribute(
-                            SpanAttributeKeys.MethodName.LAST_FOUR_PAN,
+                            SpanAttributeKeys.MethodName.TRANSACTION_TYPE,
                             AttributeType.STRING,
-                            card.getLastFourPan())));
+                            transaction.getType())));
 }
 ```
 
@@ -149,18 +149,18 @@ private void setMethodNameSpanEvent(Span span, CardAccount cardAccount, Card car
 
 ```java
 @WithSpan(value = "methodName")
-public CardDto methodName(UUID customerId, String param) 
+public AccountDto methodName(UUID customerId, String param) 
         throws CustomException {
     Span span = Span.current();
     setMethodNameBaseSpan(span, customerId, param);
     
-    CardAccount cardAccount = getCardAccount();
-    Card card = cardAccount.getActiveCard();
+        Account account = getAccount();
+        Transaction transaction = createTransaction(account);
     
     // Set span event with final non-PII data before returning
-    setMethodNameSpanEvent(span, cardAccount, card);
+        setMethodNameSpanEvent(span, account, transaction);
     
-    return mapToDto(card);
+        return mapToDto(account);
 }
 ```
 
@@ -168,8 +168,8 @@ public CardDto methodName(UUID customerId, String param)
 
 Add these imports to your service class:
 ```java
-import com.ytl.card.observability.key.SpanAttributeKeys;
-import com.ytl.card.observability.util.TraceUtils;
+import com.examples.deposit.observability.key.SpanAttributeKeys;
+import com.examples.deposit.observability.util.TraceUtils;
 import io.opentelemetry.api.common.AttributeType;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -177,23 +177,19 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 
 #### Complete Example Reference
 
-See `CardAccountService.java` for reference:
-- Methods: `createVirtualCard()`, `createPhysicalCard()`
-- Helper methods: `setVirtualCardBaseSpan()`, `setVirtualCardCreationSpanEvent()`
-
-See `CardTokenService.java` for reference:
-- Methods: `getCardTokenFromBase64()`, `activateCardToken()`
-- Helper methods: `setGetCardTokenFromBase64BaseSpan()`, `setActivateCardTokenSpanEvent()`
+See your service classes for reference:
+- Methods implementing create/update workflows with span instrumentation
+- Helper methods following `set{MethodName}BaseSpan()` and `set{MethodName}SpanEvent()` conventions
 
 #### Important Guidelines
 
 - Only capture non-PII data in span attributes. See `@.github/instructions/pii-protection.instructions.md` for the complete list.
 - Use `AttributeType.STRING` for all values (UUIDs, enums, strings, numbers).
-- Keep attribute keys in snake_case (e.g., `customer_id`, `card_type`).
+- Keep attribute keys in snake_case (e.g., `customer_id`, `account_status`).
 
 **Naming Conventions:**
-- Nested class name: PascalCase matching method name (e.g., `GetCardTokenFromBase64`, `ActivateCardToken`)
-- ACTION_PREFIX: snake_case (e.g., `"get_card_token_from_base64"`, `"activate_card_token"`)
+- Nested class name: PascalCase matching method name (e.g., `GetAccountById`, `ActivateAccount`)
+- ACTION_PREFIX: snake_case (e.g., `"get_account_by_id"`, `"activate_account"`)
 - Helper method names: `set{MethodName}BaseSpan()` and `set{MethodName}SpanEvent()`
 
 **When to Capture Spans:**
@@ -202,8 +198,8 @@ See `CardTokenService.java` for reference:
 - For methods with multiple return paths, call span event before each return
 
 **File Organization:**
-- Span attribute keys: `/src/main/java/com/ytl/card/observability/key/SpanAttributeKeys.java`
-- Constants: `/src/main/java/com/ytl/card/observability/constant/TraceNamespaceConstant.java`
+- Span attribute keys: `/src/main/java/com/examples/deposit/observability/key/SpanAttributeKeys.java` (or your observability package)
+- Constants: `/src/main/java/com/examples/deposit/observability/constant/TraceNamespaceConstant.java` (or your observability package)
 - Helper methods: At the end of the respective `*Service.java` class (after all public methods)
 
 ## REST Controller Design
@@ -234,11 +230,11 @@ Don't create separate endpoints—use query parameters for filtering, sorting, a
 
 | ✅ Good | ❌ Bad | Rule |
 |---------|--------|------|
-| `GET /cards` | `GET /getCards` | Use nouns, not verbs |
-| `GET /card-accounts` | `GET /card-account` | Use plural nouns |
-| `GET /customers/{id}/cards` | `GET /card-transactions?cardId={id}` | Use hierarchical structure |
-| `/api/card-accounts` | `/api/cardAccounts` | Use lowercase + hyphens |
-| `GET /cards?status=active` | `GET /active-cards` | Use query params for filters |
+| `GET /accounts` | `GET /getAccounts` | Use nouns, not verbs |
+| `GET /transactions` | `GET /transaction` | Use plural nouns |
+| `GET /customers/{id}/accounts` | `GET /deposit-transactions?accountId={id}` | Use hierarchical structure |
+| `/api/deposits` | `/api/depositAccounts` | Use lowercase + hyphens |
+| `GET /accounts?status=active` | `GET /active-accounts` | Use query params for filters |
 
 #### 7. Use Standard HTTP Methods Correctly
 
@@ -252,7 +248,7 @@ Don't create separate endpoints—use query parameters for filtering, sorting, a
 
 **Key Characteristics:**
 - **GET**: Safe, cacheable, no side effects
-- **POST**: Not idempotent, use for creation or actions (e.g., `/cards/{id}/activate`)
+- **POST**: Not idempotent, use for creation or actions (e.g., `/accounts/{id}/activate`)
 - **PUT**: Replace entire resource (all fields required in body)
 - **PATCH**: Update specific fields only (partial update)
 - **DELETE**: Idempotent (multiple deletes = same result)
@@ -265,9 +261,9 @@ Don't create separate endpoints—use query parameters for filtering, sorting, a
 For operations that don't fit CRUD, use verb as sub-resource with POST method:
 
 ```
-POST /cards/{cardId}/activate
-POST /cards/{cardId}/lock
-POST /transactions/{id}/refund
+POST /accounts/{accountId}/activate
+POST /accounts/{accountId}/lock
+POST /transactions/{id}/reverse
 ```
 
 **Pattern**: `POST /resources/{id}/action-verb`
@@ -278,9 +274,9 @@ Based on controller type and audience:
 
 | Controller Type | Path Prefix | Example Endpoints |
 |-----------------|-------------|-------------------|
-| **Customer-Facing** | `/{domain}` | `/cards`, `/accounts`, `/transactions` |
-| **Administrative** | `/internal/{domain}` | `/internal/reconciliation`, `/internal/cards` |
-| **External Provider** | `/webhooks/{provider}` or `/callbacks/{provider}` | `/webhooks/visa`, `/callbacks/san` |
+| **Customer-Facing** | `/{domain}` | `/accounts`, `/deposits`, `/transactions` |
+| **Administrative** | `/internal/{domain}` | `/internal/reconciliation`, `/internal/accounts` |
+| **External Provider** | `/webhooks/{provider}` or `/callbacks/{provider}` | `/webhooks/payment-network`, `/callbacks/external-system` |
 
 ### Controller Naming and Tag Conventions
 
@@ -312,15 +308,15 @@ Based on controller type and audience:
 **Example Pattern:**
 ```java
 // ❌ Bad - Direct DTO return
-public CardAccountDto getAccount(@PathVariable UUID id) {
-    return cardService.getAccount(id); 
+public AccountDto getAccount(@PathVariable UUID id) {
+        return accountService.getAccount(id); 
 }
 
 // ✅ Good - Explicit ResponseEntity
-public ResponseEntity<CardAccountDto> getAccount(@PathVariable UUID id) {
+public ResponseEntity<AccountDto> getAccount(@PathVariable UUID id) {
     return ResponseEntity.ok()
             .contentType(MediaType.APPLICATION_JSON)
-            .body(cardService.getAccount(id));
+                        .body(accountService.getAccount(id));
 }
 ```
 
@@ -329,22 +325,22 @@ public ResponseEntity<CardAccountDto> getAccount(@PathVariable UUID id) {
 ```java
 // Customer-Facing Controller
 @RestController
-@Tag(name = "Card", description = "API endpoints for customer card operations.")
+@Tag(name = "Account", description = "API endpoints for customer account operations.")
 @Profile("application-self-service")
-public class CardController {
-    private final CardAccountService cardAccountService;
+public class AccountController {
+        private final AccountService accountService;
 
-    public CardController(CardAccountService cardAccountService) {
-        this.cardAccountService = cardAccountService;
+        public AccountController(AccountService accountService) {
+                this.accountService = accountService;
     }
 
-    @Operation(summary = "Get customer active card accounts")
+        @Operation(summary = "Get customer active accounts")
     @GetMapping("/accounts")
-    public ResponseEntity<GetCardsResp> getCustomerActiveCardAccounts(
+        public ResponseEntity<GetAccountsResp> getCustomerActiveAccounts(
             @RequestHeader("x-customer-id") UUID customerId) {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(new GetCardsResp(cardAccountService.getActiveCardsByCustomerId(customerId)));
+                                .body(new GetAccountsResp(accountService.getActiveAccountsByCustomerId(customerId)));
     }
 }
 
@@ -359,10 +355,10 @@ public class InternalReconciliationController {
 
 // External Provider Controller
 @RestController
-@RequestMapping("/webhooks/visa")
-@Tag(name = "Visa Webhook", description = "API endpoints for Visa webhook integrations.")
+@RequestMapping("/webhooks/payment-network")
+@Tag(name = "Payment Network Webhook", description = "API endpoints for external provider webhook integrations.")
 @Profile("application-webhook")
-public class VisaWebhookController {
+public class PaymentNetworkWebhookController {
     // Similar structure with /webhooks paths
 }
 ```
@@ -392,8 +388,8 @@ public class VisaWebhookController {
 ### Problem Details Conventions
 - Error responses use RFC7807 style (problem+json)
 - **ALWAYS use `@Schema(implementation = ProblemDetail.class)` for all 4xx/5xx error responses**
-- `type` format: `card/<kebab-case-problem>` (e.g., `card/card-not-found`)
-- Response classes end with `Resp` (e.g., `CardNotFoundResp`)
+- `type` format: `<domain>/<kebab-case-problem>` (e.g., `deposit/account-not-found`)
+- Response classes end with `Resp` (e.g., `AccountNotFoundResp`)
 - HTTP code mappings:
   - 404: Resource not found
   - 422: Business rule violation
@@ -422,7 +418,7 @@ public class VisaWebhookController {
 ## Pagination and Query Parameters
 
 - Use Spring `Pageable` for large lists; simple collections for bounded lists
-- Response wrapper naming: `GetCardsResp` containing `List<CardAccountSummary>`
+- Response wrapper naming: `GetAccountsResp` containing `List<AccountSummary>`
 - Document optional parameters with `@Parameter(required = false)`
 - Document enum allowed values in description/examples
 
@@ -451,9 +447,9 @@ public class VisaWebhookController {
 After creating endpoints, register them in the appropriate test service client for integration testing:
 
 **Client Locations:**
-- Administrative (`/internal/**`): `InternalCardServiceClient` in `src/test/groovy/com/ytl/card/client/`
-- Customer-facing: `CardServiceClient` in `src/test/groovy/com/ytl/card/client/`
-- External provider: Provider-specific client (e.g., `VisaWebhookServiceClient`)
+- Administrative (`/internal/**`): `InternalServiceClient` in `src/test/groovy/com/examples/deposit/client/` (or your test client package)
+- Customer-facing: `ServiceClient` in `src/test/groovy/com/examples/deposit/client/` (or your test client package)
+- External provider: Provider-specific client (e.g., `PaymentNetworkWebhookServiceClient`)
 
 **Registration Checklist:**
 - [ ] Test method added to appropriate service client
@@ -467,9 +463,9 @@ After creating endpoints, register them in the appropriate test service client f
 
 ### Documentation and Schema Compliance
 - Each new endpoint: at least one success and one error example
-- No leftover generic terms (e.g. ensure no `Lead` references in card domain code/docs)
+- No leftover generic terms from other domains in code/docs
 - Status codes match mapped exception handler
-- Problem `type` strings follow `card/<kebab-case>` pattern
+- Problem `type` strings follow `<domain>/<kebab-case>` pattern
 - **All controller methods return `ResponseEntity<T>`, never plain DTOs**
 - **All 4xx and 5xx error responses use `@Schema(implementation = ProblemDetail.class)`**
 - Explicit `contentType` set for all success responses (use `MediaType.APPLICATION_JSON`)
@@ -482,13 +478,13 @@ After creating endpoints, register them in the appropriate test service client f
 - **Tag descriptions follow format**: `API endpoints for [administrative|customer|{provider}] {domain} operations.`
 
 ### REST API Endpoint Naming Validation
-- **Endpoints use nouns, not verbs** (e.g., `/cards` not `/getCards`)
+- **Endpoints use nouns, not verbs** (e.g., `/accounts` not `/getAccounts`)
 - **Collections use plural nouns** (e.g., `/products` not `/product`)
-- **Hierarchical relationships properly structured** (e.g., `/customers/{id}/cards`)
-- **URLs use lowercase with hyphens** (e.g., `/card-accounts` not `/cardAccounts` or `/card_accounts`)
+- **Hierarchical relationships properly structured** (e.g., `/customers/{id}/accounts`)
+- **URLs use lowercase with hyphens** (e.g., `/deposit-transactions` not `/depositTransactions` or `/deposit_transactions`)
 - **Nesting limited to 2-3 levels** (avoid deep hierarchies)
 - **Filtering/sorting/pagination uses query parameters** (not separate endpoints)
-- **Action endpoints use verb as sub-resource** (e.g., `/cards/{id}/activate` for non-CRUD operations)
+- **Action endpoints use verb as sub-resource** (e.g., `/accounts/{id}/activate` for non-CRUD operations)
 
 ### HTTP Method Usage Validation
 - **GET** - Retrieve only (safe, idempotent, no request body)
@@ -500,14 +496,13 @@ After creating endpoints, register them in the appropriate test service client f
 
 ### Test Client Registration
 - **Test client registration complete**:
-  - `/internal/**` endpoints registered in `InternalCardServiceClient`
-  - Customer-facing endpoints registered in `CardServiceClient`
+        - `/internal/**` endpoints registered in `InternalServiceClient`
+        - Customer-facing endpoints registered in `ServiceClient`
   - External provider endpoints registered in provider-specific client
 
 ## References
 
-- `@ARCHITECTURE.md` - System architecture and domain model
 - `@.github/instructions/pii-protection.instructions.md` - PII protection guidelines for logging and data handling
-- `@.github/instructions/testing-patterns.instructions.md` - Spock Framework testing patterns and TestContainers setup
 - `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 21 coding standards and Spring Boot patterns
-- `@.github/instructions/pagination-endpoint-design-patterns.instructions.md` - Paginated list endpoint patterns
+- `@.github/instructions/database-jpa-patterns.instructions.md` - JPA entity and repository patterns for API persistence boundaries
+- `@.github/instructions/configuration-patterns.instructions.md` - Spring profile and configuration property patterns

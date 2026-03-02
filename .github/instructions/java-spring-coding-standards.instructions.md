@@ -5,7 +5,7 @@ applyTo: '**/*.java'
 ---
 # Java and Spring Boot Coding Standards
 
-> **Based on Actual Implementation**: These coding standards reflect patterns used throughout the Card Service codebase in `src/main/java/com/ytl/card/`. All patterns are verified against actual implementation.
+> **Based on Actual Implementation**: These patterns reflect established conventions for Spring Boot microservices. Examples use this repository's structure for illustration.
 
 ## Core Principles
 
@@ -19,13 +19,13 @@ applyTo: '**/*.java'
 
 ### Code Organization
 - Use Java 21 features where appropriate (pattern matching, records, etc.)
-- Follow standard Java package naming: `com.ytl.card.<layer>`
-- Organize code in layers: `controller`, `service`, `repository`, `domain`, `config`, `mapper`, `exception`, `handler`, `external`
+- Follow standard Java package naming: `com.examples.deposit.<layer>`
+- Organize code in layers: `controller`, `service`, `repository`, `domain`, `config`, `mapper`, `exception`, `handler`
 - Use `domain` package for JPA entities (not `model`)
 - Place DTOs in `controller.<feature>.dto` packages
 - Use `projection` package for read-only query projections
 - Use `handler` package for event listeners and domain event handlers
-- Place external service clients in `external` package with sub-packages per service
+- Place external service clients in integration-oriented packages that match the codebase structure
 - Use proper access modifiers - use `private` for internal members
 - Use `final` for fields that won't be reassigned
 
@@ -46,7 +46,7 @@ applyTo: '**/*.java'
 - Always include meaningful error messages and context
 - Return appropriate HTTP status codes with `ResponseEntity`
 - Log errors at appropriate level using SLF4J (use `logger.atError()` for structured logging)
-- Throw checked exceptions for business-level errors (e.g., `CardIsLockedException`)
+- Throw checked exceptions for business-level errors (e.g., `AccountIsLockedException`)
 - Throw `IllegalStateException` for programming errors or unexpected states
 - **NEVER log PII** — see `@.github/instructions/pii-protection.instructions.md` for comprehensive guidelines. Log only record IDs (UUIDs), error codes, counts, and timestamps.
 
@@ -62,12 +62,12 @@ applyTo: '**/*.java'
 // ✅ Correct: constructor injection via @RequiredArgsConstructor + private final fields
 @Service
 @RequiredArgsConstructor
-public class CardDesignService {
-    private final CardDesignRepository cardDesignRepository;
-    private final CardProfileRepository cardProfileRepository;
-    private final CardOrderRepository cardOrderRepository;
+public class AccountService {
+    private final AccountRepository accountRepository;
+    private final TransactionRepository transactionRepository;
+    private final AccountProfileRepository accountProfileRepository;
 }
-// Reference: src/main/java/com/ytl/card/service/CardDesignService.java
+// Reference: src/main/java/com/examples/deposit/service/AccountService.java
 ```
 
 ### Configuration
@@ -93,7 +93,7 @@ public class CardDesignService {
 - Use `JpaSpecificationExecutor` for dynamic queries
 - Implement custom specifications in separate classes
 - Use `@Query` for complex queries when specifications aren't sufficient
-- Use method name conventions for query derivation (e.g., `findByCardId`, `findByCardTransactionIdAndEndToEndId`)
+- Use method name conventions for query derivation (e.g., `findByAccountId`, `findByTransactionIdAndEndToEndId`)
 - Return `Optional<T>` for single result queries that may not exist
 - Use `List<T>` for multi-result queries
 - Keep repositories as interfaces without implementation classes
@@ -186,8 +186,6 @@ public class CardDesignService {
 
 ## References
 
-- `@ARCHITECTURE.md` — System architecture and domain model
 - `@.github/instructions/database-jpa-patterns.instructions.md` — JPA entity design and repository patterns
-- `@.github/instructions/testing-patterns.instructions.md` — Spock Framework testing patterns
 - `@.github/instructions/pii-protection.instructions.md` — PII protection guidelines
 - `@.github/instructions/api-design-patterns.instructions.md` — REST API and OpenTelemetry patterns
