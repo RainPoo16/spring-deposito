@@ -1,214 +1,189 @@
 ---
 name: 'Testing Patterns'
-description: 'Spock Framework testing patterns, TestContainers setup, fake implementations, async testing, and test data management'
+description: 'Repository-wide Spock testing patterns for web slice, repository, and integration tests with isolation and deterministic assertions'
 applyTo: '**/*Test.groovy, **/*Client.groovy, **/test/**/*.groovy'
 ---
 
 # Testing Patterns and Standards
 
-Single testing standard for all Groovy/Spock tests in the Card Service. All tests must be deterministic, parallel-safe, and aligned with production behavior.
-
-> **Precedence**: For network-specific transaction tests, defer to `@.github/instructions/transactions-testing-patterns.instructions.md`. For test review standards, see `@.github/instructions/unit-test-reviewer.instructions.md`.
+Single testing standard for all Groovy/Spock tests in this repository. All tests must be deterministic, isolated, and aligned with production behavior.
 
 ## Core Principles
 
 - **Determinism first** — every test must produce the same result on every run, regardless of execution order or parallel context
-- **Real infrastructure over mocks** — use TestContainers (PostgreSQL, Kafka) and fake implementations; never use Mockito or `@MockBean`
-- **Three-layer validation** — validate API response, database state, and emitted events for every integration test
-- **Parallel safety** — use per-test unique identifiers (`GUID.v7().toUUID()`) and per-test fake instances; never share mutable static state
-- **Production-aligned fakes** — fake implementations must mirror real service behavior with configurable success/failure responses
+- **Right test slice for the job** — use web slice, repository slice, and full integration tests intentionally
+- **Observable assertions** — validate HTTP status, content type, and key payload fields
+- **Parallel safety** — use per-test data and avoid shared mutable static state
+- **Minimal mocking** — mock collaborators only in slice tests; prefer real wiring in integration tests
 
 ## 1) Non-Negotiable Rules
 
 - Use **Spock** for tests.
-- Use **`AbstractIntegrationTest`** for integration tests.
-- Use **`objectMapper.readValue()`** for response parsing. Do **not** use `JsonSlurper`.
-- Use **fake implementations** for external services (prefer interfaces + fakes).
+- Use **`*Spec.groovy`** naming.
+- Use **Spring test annotations that match test scope**:
+  - `@WebMvcTest` for controller slice tests
+  - `@DataJpaTest` for repository tests
+  - `@SpringBootTest` + `@AutoConfigureMockMvc` for end-to-end integration tests
 - Keep tests **parallel-safe** (no shared mutable static state).
-- Validate both:
-  - business/database state
-  - emitted events (when flow is event-driven)
+- Validate **status + content type + critical response fields** for HTTP tests.
 
 ## 2) PII Protection in Tests
 
 - Use obviously fake data only.
 - Do not log full objects that may include sensitive fields.
 - Log IDs, statuses, counters, and technical metadata only.
-- ✅ `logger.info("Created test entity id={}", entity.id)` / ❌ `logger.info("Created card={}", card)`
+- ✅ `logger.info("Created test accountNumber={}", accountNumber)` / ❌ `logger.info("Created account={}", account)`
 
 ## 3) Test Base and Structure
 
-- Integration tests extend `AbstractIntegrationTest`.
-- Use descriptive test names: `"should ... when ..."` or `"... failed - #caseDescription"`.
+- Use descriptive test names that describe behavior and expected outcome.
 - Structure every test with `given:` → `when:` → `then:` blocks.
 
 ```groovy
-// ✅ Minimal integration test with TestContainers (via AbstractIntegrationTest)
-class InternalCardControllerPaginationTest extends AbstractIntegrationTest {
+// ✅ Minimal controller slice test
+@WebMvcTest(AccountController)
+@Import(GlobalExceptionHandler)
+class AccountControllerSpec extends Specification {
 
-    def "should return paginated card accounts with metadata"() {
-        given: "A customer with a virtual card"
-        def user = generateNewUserWithAVirtualCard()
+  @Autowired
+  private MockMvc mockMvc
 
-        when: "Admin requests card accounts"
-        def response = internalCardServiceClient.getCardAccounts(user.customerProjection.id, null, null, 0, 2)
+  @SpringBean
+  private AccountService accountService = Mock()
 
-        then: "Response contains paginated results"
-        response.status == 200
-        response.contentType == MediaType.APPLICATION_JSON_VALUE
-        def result = objectMapper.readValue(response.body.toString(), GetCardAccountsResp.class)
-        result.totalElements() >= 1
+  def "openAccount returns 201"() {
+    when:
+    def result = mockMvc.perform(post("/api/accounts")
+      .contentType(MediaType.APPLICATION_JSON)
+      .content('{"ownerName":"Alice","accountNumber":"ACCT-CTRL-001"}'))
+
+    then:
+    1 * accountService.openAccount("Alice", "ACCT-CTRL-001") >> Account.create("Alice", "ACCT-CTRL-001")
+    result.andExpect(status().isCreated())
+      .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+      .andExpect(jsonPath('$.accountNumber').value('ACCT-CTRL-001'))
     }
 }
-// Reference: src/test/groovy/com/ytl/card/controller/card/InternalCardControllerPaginationTest.groovy
+// Reference: src/test/groovy/com/examples/deposit/controller/AccountControllerSpec.groovy
 ```
 
 ## 4) Response Validation (Mandatory)
 
-Always validate: **HTTP status** + **content type** + **typed response body**.
+Always validate: **HTTP status** + **content type** + **key response fields**.
 
-- Success: `response.status == 200`, `response.contentType == MediaType.APPLICATION_JSON_VALUE`, parse with `objectMapper.readValue(response.body.toString(), TypedResponse.class)`.
-- Error: `response.status == 4xx`, `response.contentType == MediaType.APPLICATION_PROBLEM_JSON_VALUE`, parse into `ProblemDetail.class`, assert `type` and `title`.
-- ❌ Never use `JsonSlurper` for response parsing.
+- Success pattern: `status().isOk()` or `status().isCreated()` and `contentTypeCompatibleWith(MediaType.APPLICATION_JSON)`.
+- Error pattern: assert 4xx/5xx and `contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)`.
+- Assert relevant fields using `jsonPath`.
 
 ## 5) Parameterized Error Tests (`where:`)
 
 Use data-driven tests when scenarios share the same structure and differ only by setup/inputs/expected errors.
 
 - Name pattern: `"Operation failed - #caseDescription"`
-- Declare data variables as method parameters.
-- Use `where:` table with columns: description, user, setupAction, IDs, expected status/type/title.
-- In `then:` block: assert status, content type, and parse `ProblemDetail` with `objectMapper.readValue()`.
+- Use a `where:` table with clear scenario labels and expected outcomes.
+- In `then:` block: assert status and payload fields per scenario.
 
-### Critical Pitfall (Spock Binding)
+### Common Pitfall (Spock Binding)
 
-- Method parameter must be `user` (not `setupUser`).
-- In `where:`, use direct call: `generateNewUserWithAVirtualCard()`.
-- Do **not** do `def user = setupUser()` in `given:`.
+- Keep `where:` variable names consistent with method parameters.
+- Avoid mutating shared objects in `where:` data rows.
 
 ## 6) Async and Eventual Consistency
 
-Use `await(timeout, { assertion })` helper or `PollingConditions(timeout: N, delay: D).eventually { assert ... }` for eventual consistency checks.
+Use `PollingConditions` for eventual consistency checks when async behavior is expected.
 
-## 7) Event Testing (Kafka)
+```groovy
+def conditions = new PollingConditions(timeout: 5, delay: 0.2)
+conditions.eventually {
+  assert repository.findByAccountNumber(accountNumber).present
+}
+```
 
-- Use `KafkaTestService` to send and assert Kafka events.
-- Verify both the emitted event payload and resulting side effects (database state, downstream calls).
-- Pattern: send event → poll until side effect appears → assert topic content with deserialized Avro payload.
-- Use `kafkaTestService.assertTopicContent(topicName, assertion)` to validate published events.
-- Use `kafkaTestService.deserializeAvroValue(topicName, bytes)` for Avro deserialization.
+## 7) Integration Test Pattern
 
-For transaction-specific event testing patterns (VISA, MyDebit, SAN), see `@.github/instructions/transactions-testing-patterns.instructions.md`.
+- Use `@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)` with `@AutoConfigureMockMvc`.
+- Validate full request flow across controller, service, and persistence boundaries.
+- Keep integration test payloads realistic but synthetic.
 
-## 8) Test Data and Generators
+Reference: `src/test/groovy/com/examples/deposit/integration/BankDepositIntegrationSpec.groovy`
 
-Use generator helpers from `AbstractIntegrationTest`:
+## 8) Repository Test Pattern
 
-- `generateNewUserWithAVirtualCard()`
-- `generateNewUserWithAPhysicalCard()`
-- `generateNewUserWithAConvertedActivePhysicalCard()`
-- `generateNewUserWithSavingsAccount()`
+- Use `@DataJpaTest` for repository behavior and constraint validation.
+- Cover uniqueness constraints, optimistic locking, and persistence behavior.
 
-Use `GUID.v7().toUUID()` for runtime IDs in tests.
+Reference: `src/test/groovy/com/examples/deposit/repository/AccountRepositorySpec.groovy`
 
-## 9) Cleanup and Isolation
+## 9) Test Data and Isolation
 
-- Reset fake service state in `cleanup()` (e.g., `fakeService.reset()`).
-- Do not use `repository.deleteAll()`.
-- Do not rely on test order.
+- Use deterministic, fake test data (e.g., `ACCT-CTRL-001`, `ACCT-E2E-FLOW-001`).
+- Keep data local to each test; do not reuse mutable global fixtures.
+- Do not rely on execution order.
 
-## 10) External Services: Interface + Fake Pattern
+## 10) Mocking and Collaboration Boundaries
 
-1. Define interface for external dependency.
-2. Production class implements interface; inject interface in services.
-3. Use fake implementation in tests — ensures reliability, determinism, and parallel safety.
+- In web slice tests, use `@SpringBean` and Spock `Mock()` for service collaborators.
+- In integration tests, avoid replacing core beans unless the scenario requires it.
+- Mock only external interactions not under test.
 
-Fake requirements: configurable success/failure responses, `reset()` support, no static mutable state.
-
-## 11) Idempotency Testing
-
-For retryable commands/events, test duplicate execution:
-
-- first call succeeds
-- duplicate call is safe (no duplicate side effects)
-- state remains consistent
-
-Check using stable keys such as `id` or `correlationId`.
-
-- **Retryable API calls**: repeat the same request with the same business key and assert no duplicate records, events, or transfers.
-- **Retryable Kafka events**: replay the same event and assert state remains stable (no duplicate entities or side effects).
-
-## 12) Parallel Testing Rules
+## 11) Parallel Testing Rules
 
 ### Do
 
-- Use per-test unique identifiers (`GUID.v7().toUUID()`) to avoid cross-test data collisions.
-- Use per-test instances for mutable objects/fakes.
-- Use `CompletableFuture`/parallel execution where concurrency is part of behavior.
-- Assert final consistency after all futures complete.
+- Keep per-test account numbers/IDs unique when tests can run concurrently.
+- Keep all mutable fixtures in instance scope.
+- Assert final consistency after concurrent operations.
 
 ### Don’t
 
-- `ClockUtils.setFakeClock(...)` shared static mutation
-- `System.setProperty(...)` without strict isolation
-- static mutable fixtures used by multiple tests
+- Use shared mutable static state.
+- Depend on global JVM settings without strict reset.
+- Write order-dependent tests.
 
-## 13) Transaction Test Delegation
-
-Transaction tests (VISA, MyDebit, SAN) must additionally follow `@.github/instructions/transactions-testing-patterns.instructions.md` for network-specific fixture composition, assertion patterns, and GL movement validation. When generic and transaction-specific instructions conflict, the transaction-specific file takes precedence for transaction tests.
-
-## 14) Test Client Pattern
-
-Encapsulate MockMvc calls in dedicated client classes. Each client wraps `MockMvc.perform(...)` calls and returns parsed results via `MvcUtil.parseMvcResult(result)`. This keeps test methods focused on assertions, not HTTP plumbing.
-
-## 15) Error Scenario Matrix (Quick Reference)
+## 12) Error Scenario Matrix (Quick Reference)
 
 | Category | Common HTTP Code |
 |---|---|
 | Not found | 404 |
 | Validation | 400 |
-| Business rule | 422 |
-| External dependency | 424 |
-| Authorization | 403 |
+| Business rule | 409 or 422 |
+| Unexpected server error | 500 |
 
-## 16) Minimum Review Checklist
+## 13) Minimum Review Checklist
 
 Before finalizing a test:
 
-- [ ] Uses correct base class (`AbstractIntegrationTest` for integration)
-- [ ] Uses typed response parsing with `objectMapper.readValue()`
-- [ ] Validates status + content type + response fields
-- [ ] Covers happy path and key failure paths
-- [ ] Resets fake state in `cleanup()`
-- [ ] Avoids static mutable shared state
-- [ ] Verifies side effects/events when applicable
+- [ ] Uses the correct test slice annotation for the target behavior
+- [ ] Uses `given/when/then` with clear setup and assertions
+- [ ] Validates status + content type + key response fields for HTTP tests
+- [ ] Covers at least one happy path and one failure path
+- [ ] Avoids shared mutable static state and order dependence
 
-## 17) Anti-Patterns (Reject)
+## 14) Anti-Patterns (Reject)
 
-- `JsonSlurper` response parsing
-- shared mutable static state
-- test-order-dependent behavior
-- missing cleanup for stateful fakes
-- deleting all records globally as cleanup
-- assertions that ignore content type for error responses
+- Card-domain-specific fixtures and helpers copied from other repositories.
+- Shared mutable static state.
+- Test-order-dependent behavior.
+- Assertions that ignore content type for error responses.
+- Over-mocking in integration tests.
 
-## 18) Running Tests (Quick Commands)
+## 15) Running Tests (Quick Commands)
 
-- All tests: `./mvnw test`
-- Single class: `./mvnw test -Dtest=ClassName`
-- Single method: `./mvnw test -Dtest='ClassName#method name'`
-- Build without tests: `./mvnw clean verify -DskipTests`
+- All tests (Maven): `./mvnw test`
+- Single spec (Maven): `./mvnw test -Dtest=AccountControllerSpec`
+- All tests (Gradle): `./gradlew test`
+- Single spec (Gradle): `./gradlew test --tests '*AccountControllerSpec'`
 
-## 19) Test Scope and Organization
+## 16) Test Scope and Organization
 
-- Unit tests: pure domain/value-object/utility logic.
-- Integration tests: default choice; full Spring + TestContainers via `AbstractIntegrationTest`.
-- Keep tests isolated with generated data (`GUID.v7().toUUID()`).
-- For event-driven flows, validate database effects and published events.
+- Unit/spec-level logic tests: pure domain/value-object/utility behavior.
+- Web slice tests: controller contract + validation + exception mapping.
+- Repository tests: JPA mapping, constraints, and locking behavior.
+- Integration tests: cross-layer flows using real Spring context.
 
 ## References
 
-- `@ARCHITECTURE.md` — domain model, event-driven patterns, and card service architecture
-- `@.github/instructions/transactions-testing-patterns.instructions.md` — VISA, MyDebit, SAN transaction test patterns
-- `@.github/instructions/unit-test-reviewer.instructions.md` — test quality review guidelines
+- `src/test/groovy/com/examples/deposit/controller/AccountControllerSpec.groovy` — `@WebMvcTest` + `@SpringBean` pattern
+- `src/test/groovy/com/examples/deposit/repository/AccountRepositorySpec.groovy` — `@DataJpaTest` repository pattern
+- `src/test/groovy/com/examples/deposit/integration/BankDepositIntegrationSpec.groovy` — full integration flow pattern
 - `@.github/instructions/pii-protection.instructions.md` — PII protection rules for test data
