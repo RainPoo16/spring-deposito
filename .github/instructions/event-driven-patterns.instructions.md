@@ -4,22 +4,22 @@ description: 'Event publishing via Debezium outbox pattern, Kafka integration, A
 applyTo: '**/handler/**/*.java, **/domain/eventoutbox/EventOutbox.java, **/*EventListener.java'
 ---
 
-# Event-Driven Architecture Patterns (Card Service)
+# Event-Driven Architecture Patterns
 
-> **Based on Actual Implementation**: Review guidelines for the Card Service, a Spring Boot microservice managing Card related features.
+> **Based on Actual Implementation**: These patterns reflect established conventions for Spring Boot microservices. Examples use this repository's structure for illustration.
 
 ## PII Protection
 
-All PII protection rules from `@.github/instructions/pii-protection.instructions.md` apply. Never log customer names, card numbers, tokens, or credentials. Only log UUIDs, correlation IDs, status codes, and system-generated metadata.
+All PII protection rules from `@.github/instructions/pii-protection.instructions.md` apply. Never log customer names, account numbers, tokens, or credentials. Only log UUIDs, correlation IDs, status codes, and system-generated metadata.
 
-This instruction file defines how the Card service publishes and consumes domain events using the Debezium Outbox pattern, Kafka, Avro schemas, and CQRS projections. It replaces any legacy or generic guidance.
+This instruction file defines how the service publishes and consumes domain events using the Debezium Outbox pattern, Kafka, Avro schemas, and CQRS projections.
 
 ## Core Principles
 
 1. Atomic persistence + publish: domain state and outbox entry are committed in the same DB transaction (Outbox pattern).
 2. Idempotent consumption: handlers tolerate replay and at-least-once delivery; no duplicate side-effects.
 3. Backward-compatible Avro evolution (additive only; never break existing consumers).
-4. Deterministic ordering per aggregate using stable partition key (`cardId` or `cardAccountId`).
+4. Deterministic ordering per aggregate using stable partition key (`accountId` or `transactionId`).
 5. Observability: structured envelope logging (eventType, aggregateId, eventId, partition, offset) – avoid PII.
 6. Feature flags: experimental events emitted only when corresponding flag enabled.
 7. Time-ordered IDs: use UUID v7 (`GUID.v7().toUUID()`) for eventId and aggregate IDs to aid ordering & keyset scans.
@@ -29,22 +29,22 @@ This instruction file defines how the Card service publishes and consumes domain
 
 ```java
 @Service
-public class CardLifecycleService {
-  private final CardAccountRepository cardAccountRepository;
+public class AccountLifecycleService {
+  private final AccountRepository accountRepository;
   private final EventOutboxRepository outboxRepository;
 
   @Transactional(rollbackFor = Exception.class)
-  public void activate(CardAccount account) {
+  public void activate(Account account) {
     account.activate();
-    cardAccountRepository.save(account);
+    accountRepository.save(account);
 
-    CardActivated payload = CardActivated.from(account);
+    AccountActivated payload = AccountActivated.from(account);
     EventOutbox outbox = EventOutbox.builder()
         .id(GUID.v7().toUUID())              // outbox row ID
-        .aggregateType("CardAccount")
+        .aggregateType("Account")
         .aggregateId(account.getId())
-        .eventType("CardActivated")
-        .partitionKey(account.getActiveCard().getId()) // ordering by card
+        .eventType("AccountActivated")
+        .partitionKey(account.getId()) // ordering by account
         .occurredAt(Instant.now())
         .payload(avroSerializer.serialize(payload))
         .traceId(Tracing.currentTraceId())
@@ -65,10 +65,10 @@ Guidelines:
 | Field          | Purpose                                                               |
 | -------------- | --------------------------------------------------------------------- |
 | eventId        | UUID v7 unique identifier per event occurrence                        |
-| aggregateType  | Domain aggregate name (`CardAccount`, `Card`)                         |
+| aggregateType  | Domain aggregate name (`Account`, `Transaction`)                      |
 | aggregateId    | UUID v7 of the aggregate instance                                     |
-| partitionKey   | Key used for Kafka partitioning (usually `cardId` or `cardAccountId`) |
-| eventType      | Semantic past-tense name (e.g. `CardActivated`)                       |
+| partitionKey   | Key used for Kafka partitioning (usually `accountId` or `transactionId`) |
+| eventType      | Semantic past-tense name (e.g. `AccountActivated`)                    |
 | occurredAt     | UTC timestamp at commit time                                          |
 | payload        | Avro serialized domain data                                           |
 | traceId/spanId | OpenTelemetry tracing IDs (minimal)                                   |
@@ -81,7 +81,7 @@ Keep envelope minimal; avoid large metadata blobs and secrets.
 Wrap emission logic for experimental features:
 
 ```java
-if (!featureFlags.isPhysicalCardReplacementEnabled()) return; // suppress event
+if (!featureFlags.isAccountReplacementEnabled()) return; // suppress event
 publishOutbox(eventOutboxRepository, aggregateId, eventType, payload);
 ```
 
@@ -112,34 +112,34 @@ New event workflow:
 
 | Key           | Use Case                                                |
 | ------------- | ------------------------------------------------------- |
-| cardId        | Ordering of card-specific lifecycle and setting updates |
-| cardAccountId | Account-level transitions covering multiple cards       |
+| accountId     | Ordering of account-specific lifecycle and setting updates |
+| transactionId | Transaction-level transitions linked to an account         |
 | customerId    | Customer-centric projections (less frequent)            |
 
 Once chosen for an event type, do NOT change partition key without migrating to a new topic.
 
 ## Kafka Topic Naming
 
-Topics follow `<Domain>.<EventType>` convention (e.g. `Card.CardAccount`, `Card.VirtualCardCreated`). Test configuration (`KafkaTestConfig`) compacts topics (cleanup.policy=compact). Avoid renaming existing production topics; add new ones with manifest updates.
+Topics follow `<Domain>.<EventType>` convention (e.g. `Deposit.Account`, `Deposit.AccountCreated`). Test configuration (`KafkaTestConfig`) compacts topics (cleanup.policy=compact). Avoid renaming existing production topics; add new ones with manifest updates.
 
 ## Consumer Pattern (Idempotent)
 
 ### File Location
 
-- **All Kafka event listeners must be placed in the `/handler/` package** (e.g., `src/main/java/com/ytl/card/handler/`)
-- File naming convention: `*EventListener.java` (e.g., `CreditLineAccountClosedEventListener.java`, `VisaCardTransactionEventListener.java`)
+- **All Kafka event listeners must be placed in the `/handler/` package** (e.g., `src/main/java/com/examples/deposit/handler/`)
+- File naming convention: `*EventListener.java` (e.g., `CreditLineAccountClosedEventListener.java`, `AccountTransactionEventListener.java`)
 - Use `@Component` and `@Profile("eventhandler")` annotations
 - This ensures consistent organization and makes event handlers easy to locate
 
 ```java
 @Component
 @Profile("eventhandler")
-public class CardEventListener {
-  private final CardProjectionService projectionService;
+public class AccountEventListener {
+  private final AccountProjectionService projectionService;
   private final ProcessedEventStore processedStore; // track processed eventIds
 
-  @KafkaListener(topics = "Card.CardAccount", groupId = "card-projection")
-  public void onMessage(CardAccountEventEnvelope envelope) {
+  @KafkaListener(topics = "Deposit.Account", groupId = "account-projection")
+  public void onMessage(AccountEventEnvelope envelope) {
     if (processedStore.isProcessed(envelope.getEventId())) return; // idempotency guard
     try {
       projectionService.apply(envelope);
@@ -172,7 +172,7 @@ DLQ record content: `eventId`, `eventType`, `aggregateId`, partition, offset, er
 ## Projection / Read Model Updates
 
 - Only upsert changed fields; avoid full rewrites.
-- Use separate projection tables for frequent read endpoints (e.g. active cards per customer).
+- Use separate projection tables for frequent read endpoints (e.g. active accounts per customer).
 - Denormalize responsibly; ensure replay builds the same state.
 
 ### Replay / Backfill Procedure
@@ -197,28 +197,28 @@ DLQ record content: `eventId`, `eventType`, `aggregateId`, partition, offset, er
 Spock snippet:
 
 ```groovy
-when: 'card activated'
+when: 'account activated'
 service.activate(account)
-then: 'CardActivated outbox row exists'
-outboxRepository.findLatestByAggregateId(account.id).eventType == 'CardActivated'
+then: 'AccountActivated outbox row exists'
+outboxRepository.findLatestByAggregateId(account.id).eventType == 'AccountActivated'
 ```
 
 ## Observability
 
 - Log INFO: `eventType`, `aggregateId`, `eventId`, partition, offset.
 - Structured logging (logstash encoder); payload only at DEBUG.
-- Metrics: `card_events_published_total`, `card_events_consumed_total`, `card_events_dlq_total`, consumer lag dashboard.
+- Metrics: `domain_events_published_total`, `domain_events_consumed_total`, `domain_events_dlq_total`, consumer lag dashboard.
 - Tracing: propagate minimal context (traceId/spanId) – avoid large baggage.
 
 ## Security & PII
 
-- No PAN, full names, or sensitive personal data in events.
-- Allowed: surrogate IDs, last four PAN if strictly required & approved.
+- No full names, account numbers, or sensitive personal data in events.
+- Allowed: surrogate IDs and minimal non-PII references if strictly required & approved.
 - Payload encryption not used; rely on topic ACLs and network security.
 
 ## Feature Flag Checklist for New Event
 
-- [ ] Flag key added to configuration (`card.feature.<slug>.enabled=false`).
+- [ ] Flag key added to configuration (`deposit.feature.<slug>.enabled=false`).
 - [ ] Emission conditional on flag.
 - [ ] QA environments enable flag progressively.
 - [ ] Monitoring alerts configured before prod enable.

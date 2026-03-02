@@ -127,7 +127,7 @@ logger.error("Failed to process transaction {}: {}", txnId, e.getMessage());
 **DO:**
 ```java
 // Log batch progress with IDs only
-logger.warn("Processing batch {} for CardAccount (size: {}, lastId: {})", 
+logger.warn("Processing batch {} for Account (size: {}, lastId: {})", 
     batchNumber, records.size(), lastId);
 logger.warn("Batch {}: Updated {} / Processed {} / Skipped {}", 
     batchNumber, updated, processed, skipped);
@@ -313,6 +313,5 @@ public class SecureLogger {
 - **PDPA** (Singapore): Section 24 (protection of personal data)
 - **PCI DSS**: Requirement 3 (protect stored cardholder data)
 - **ISO 27001**: A.18.1.3 (protection of records)
-- `@.github/instructions/testing-patterns.instructions.md` — PII rules for test data
 - `@.github/instructions/java-spring-coding-standards.instructions.md` — logging best practices
 

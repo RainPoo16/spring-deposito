@@ -68,7 +68,7 @@ applyTo: 'glob pattern for target files'
 
 **Required fields** (every instruction file must include all three):
 
-- **name**: Title Case identifier derived from filename (e.g., file `testing-patterns.instructions.md` has name: `'Testing Patterns'`). Must be unique across all instruction files.
+- **name**: Title Case identifier derived from filename (e.g., file `database-jpa-patterns.instructions.md` has name: `'Database Jpa Patterns'`). Must be unique across all instruction files.
 - **description**: Single-quoted string, 1-500 characters, clearly stating purpose. Keep concise.
 - **applyTo**: Glob pattern(s) specifying which files trigger this instruction.
   - Single pattern: `'**/*.java'`
@@ -108,18 +108,18 @@ One instruction file = one domain. Never mix unrelated concerns.
 ✅ **Good domain boundaries**:
 - `database-jpa-patterns.instructions.md` — JPA, repositories, entities
 - `api-design-patterns.instructions.md` — REST APIs, OpenAPI, controllers
-- `testing-patterns.instructions.md` — Spock tests, TestContainers
+- `event-driven-patterns.instructions.md` — Kafka, Debezium, Avro schemas
 
 ❌ **Bad — mixed concerns**:
 - `backend-everything.instructions.md` — Database + API + Testing + Events
 
 ### File References
 
-- Use `@` prefix for documentation/config file references (e.g., `@.github/instructions/*.instructions.md`, `@ARCHITECTURE.md`).
+- Use `@` prefix for documentation/config file references (e.g., `@.github/instructions/*.instructions.md`, `@README.md`).
 - Source code paths (`src/main/java/...`) do not need the `@` prefix.
 - Always provide full file paths to real implementations:
-  - ✅ "See `src/main/java/com/ytl/card/service/CardService.java` for token refresh"
-  - ❌ "See CardService for implementation"
+  - ✅ "See `src/main/java/com/examples/deposit/service/account/AccountService.java` for implementation details"
+  - ❌ "See AccountService for implementation"
 
 ### Examples
 
@@ -130,16 +130,16 @@ One instruction file = one domain. Never mix unrelated concerns.
 ```java
 // Event publishing via outbox pattern
 @Transactional
-public void activateCard(UUID cardId) {
-    Card card = cardRepository.findById(cardId)
-        .orElseThrow(() -> new CardNotFoundException(cardId));
-    card.activate();
-    cardRepository.save(card);
-    eventOutboxService.publish(new CardActivatedEvent(card.getId()));
+public void activateAccount(UUID accountId) {
+    Account account = accountRepository.findById(accountId)
+        .orElseThrow(() -> new AccountNotFoundException(accountId));
+    account.activate();
+    accountRepository.save(account);
+    eventOutboxService.publish(new AccountActivatedEvent(account.getId()));
 }
 ```
 
-**Reference**: `src/main/java/com/ytl/card/service/CardService.java`
+**Reference**: `src/main/java/com/examples/deposit/service/account/AccountService.java`
 
 ### Writing Style
 
@@ -190,7 +190,7 @@ A well-structured instruction file follows this order:
 - Always use `applyTo` frontmatter in path-specific instruction files
 - Place language-specific rules in dedicated files:
   - Java → `java-spring-coding-standards.instructions.md` with `applyTo: '**/*.java'`
-  - Groovy tests → `testing-patterns.instructions.md` with `applyTo: '**/*Test.groovy'`
+  - Event handlers → `event-driven-patterns.instructions.md` with `applyTo: '**/handler/**/*.java'`
 - Keep `@.github/copilot-instructions.md` for repository-wide, language-agnostic guidance
 
 ### Issue 3: Inconsistent Behavior Across Reviews
@@ -206,7 +206,7 @@ A well-structured instruction file follows this order:
 - Prioritize top 10–20 most critical rules per domain
 - Add concrete examples to clarify intent:
   - ❌ Vague: "Use proper error handling"
-  - ✅ Specific: "Catch specific exceptions and wrap in `CardServiceException` with error codes from `ErrorCode` enum"
+  - ✅ Specific: "Catch specific exceptions and wrap in `AccountServiceException` with error codes from `ErrorCode` enum"
 - Accept normal AI variability — focus on making critical rules unambiguous
 - Use imperative language and hierarchically structured headings
 
@@ -320,7 +320,7 @@ Before documenting patterns in any instruction file:
 Before creating or updating instruction files, reference:
 
 1. **`@.github/copilot-instructions.md`** — Repository-wide standards and file pattern mapping
-2. **`@ARCHITECTURE.md`** — System architecture, domain model, and technical decisions
+2. **`@README.md`** — Project overview and setup instructions
 
 ---
 
@@ -356,7 +356,7 @@ Brief introduction and context (1-2 sentences).
 code example
 ```
 
-**Reference**: `src/main/java/com/ytl/card/service/CardService.java`
+**Reference**: `src/main/java/com/examples/deposit/service/account/AccountService.java`
 
 **Anti-Pattern**:
 ```language
@@ -374,8 +374,8 @@ code example
 
 ## References
 
-- Related: `@.github/instructions/related-file.instructions.md`
-- Architecture: `@ARCHITECTURE.md`
+- Related: `@.github/instructions/java-spring-coding-standards.instructions.md`
+- Project: `@README.md`
 ```
 
 ---
