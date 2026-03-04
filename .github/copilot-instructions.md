@@ -89,26 +89,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 For non-trivial work (multi-file, cross-domain, or >1 risk area):
 - Enter plan mode by default and define upfront specs plus a short step checklist with explicit verification per step.
-- Use `runSubagent` tool with `Prometheus` as the plan orchestrator (a subagent responsible for high-level planning and decomposition) and `Atlas` as the execution orchestrator (a subagent focused on carrying out and validating the concrete implementation steps).
 - Execute one step at a time and validate before moving forward.
 - If execution goes sideways or assumptions break, stop immediately and re-plan before continuing.
 - Keep updates outcome-focused: what changed, what was verified, what is next.
-
-### 5.1 Plan Artifacts and Subagent Handoffs (Mandatory)
-
-When handling non-trivial tasks, always produce plan artifacts in the configured plan directory:
-
-- Determine `<plan-directory>` by checking `AGENTS.md` for plan directory configuration.
-- If `AGENTS.md` is missing or does not specify a plan directory, default to `plans/`.
-- During planning, write `<plan-directory>/<task-name>-plan.md`.
-- At completion, write `<plan-directory>/<task-name>-complete.md`.
-
-For subagent workflows:
-
-- If `Prometheus` is used for planning, require it to write `<plan-directory>/<task-name>-plan.md` before handoff.
-- If `Atlas` is used for execution, require it to write `<plan-directory>/<task-name>-complete.md` after all phases are done.
-- Keep `<task-name>` stable across plan, phase completion, and final completion files.
-- Do not write these plan artifacts outside the configured plan directory.
 
 ### 6. Subagent Strategy
 
