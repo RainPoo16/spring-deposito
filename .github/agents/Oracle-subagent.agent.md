@@ -1,8 +1,10 @@
 ---
+name: Oracle Subagent
 description: Research context and return findings to parent agent
 argument-hint: Research goal or problem statement
-tools: ['search', 'search/usages', 'read/problems', 'search/changes', 'execute/testFailure', 'web/fetch','agent']
+tools: ['search', 'search/usages', 'read/problems', 'search/changes', 'execute/testFailure', 'web/fetch', 'agent']
 model: GPT-5.3-Codex (copilot)
+user-invocable: false
 ---
 You are a PLANNING SUBAGENT called by a parent CONDUCTOR agent.
 
