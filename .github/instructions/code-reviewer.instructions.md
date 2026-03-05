@@ -210,34 +210,6 @@ Structure your review output as:
   - Fallback mechanisms for non-critical services
   - Bulkhead pattern for resource isolation
 
-### Observability Configuration
-
-- **Metrics**: Micrometer and Prometheus configuration:
-  - Custom metrics for account operations (account.created, account.activated, account.suspended)
-  - Transaction metrics (transaction.authorized, transaction.cleared, transaction.declined)
-  - Settlement metrics (settlement.reconciled, settlement.mismatch)
-  - External service call metrics (provider.latency, payment.latency)
-  - JVM and system metrics (heap, threads, CPU)
-- **Tracing**: OpenTelemetry span instrumentation:
-  - `@WithSpan` annotation on service methods
-  - Span attributes defined in your observability package (for example `com.examples.deposit.observability.key.SpanAttributeKeys`)
-  - Span events for business milestones
-  - Non-PII data only (UUIDs, statuses, counts, last 4 digits of sensitive identifiers where applicable)
-  - Distributed tracing across service boundaries
-  - Correlation ID propagation in Kafka events
-- **Health Checks**: Spring Boot Actuator endpoints:
-  - `/actuator/health` for liveness probe
-  - `/actuator/health/readiness` for readiness probe
-  - Custom health indicators for database, Kafka, external services
-  - Proper exposure configuration in `application.yml`
-- **Logging**: Structured logging with sensitive data protection:
-  - Logback configuration with JSON formatting
-  - Log levels per package (INFO for business logic, DEBUG for troubleshooting)
-  - **NEVER log PII**: No account numbers, customer names, emails, addresses
-  - Log only non-PII identifiers: UUIDs, correlation IDs, status codes
-  - Proper exception logging without sensitive data exposure
-  - Request/Response logging with sanitization
-
 ## Enhanced Security Validation
 
 ### Authentication & Authorization
@@ -498,5 +470,4 @@ You must be thorough but practical, focusing on issues that genuinely impact sec
 - `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 17 coding standards and Spring Boot patterns
 - `@.github/instructions/api-design-patterns.instructions.md` - REST API design and OpenAPI documentation
 - `@.github/instructions/database-jpa-patterns.instructions.md` - JPA entity design and repository patterns
-- `@.github/instructions/event-driven-patterns.instructions.md` - Event publishing via outbox pattern
 - `@.github/instructions/configuration-patterns.instructions.md` - Spring configuration and profile management

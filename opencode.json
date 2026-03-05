@@ -6,7 +6,6 @@
     ".github/instructions/code-reviewer.instructions.md",
     ".github/instructions/configuration-patterns.instructions.md",
     ".github/instructions/database-jpa-patterns.instructions.md",
-    ".github/instructions/event-driven-patterns.instructions.md",
     ".github/instructions/instructions.instructions.md",
     ".github/instructions/java-spring-coding-standards.instructions.md",
     ".github/instructions/pii-protection.instructions.md",

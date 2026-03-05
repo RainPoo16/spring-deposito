@@ -108,7 +108,6 @@ One instruction file = one domain. Never mix unrelated concerns.
 ✅ **Good domain boundaries**:
 - `database-jpa-patterns.instructions.md` — JPA, repositories, entities
 - `api-design-patterns.instructions.md` — REST APIs, OpenAPI, controllers
-- `event-driven-patterns.instructions.md` — Kafka, Debezium, Avro schemas
 
 ❌ **Bad — mixed concerns**:
 - `backend-everything.instructions.md` — Database + API + Testing + Events
@@ -126,20 +125,6 @@ One instruction file = one domain. Never mix unrelated concerns.
 - Use minimal, clear examples: 5–15 lines showing only the core pattern.
 - After examples, link to actual implementation files for full context.
 - No PII in examples — use only UUIDs, correlation IDs, system-generated metadata.
-
-```java
-// Event publishing via outbox pattern
-@Transactional
-public void activateAccount(UUID accountId) {
-    Account account = accountRepository.findById(accountId)
-        .orElseThrow(() -> new AccountNotFoundException(accountId));
-    account.activate();
-    accountRepository.save(account);
-    eventOutboxService.publish(new AccountActivatedEvent(account.getId()));
-}
-```
-
-**Reference**: `src/main/java/com/examples/deposit/service/account/AccountService.java`
 
 ### Writing Style
 
@@ -190,7 +175,6 @@ A well-structured instruction file follows this order:
 - Always use `applyTo` frontmatter in path-specific instruction files
 - Place language-specific rules in dedicated files:
   - Java → `java-spring-coding-standards.instructions.md` with `applyTo: '**/*.java'`
-  - Event handlers → `event-driven-patterns.instructions.md` with `applyTo: '**/handler/**/*.java'`
 - Keep `@.github/copilot-instructions.md` for repository-wide, language-agnostic guidance
 
 ### Issue 3: Inconsistent Behavior Across Reviews

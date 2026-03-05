@@ -374,11 +374,6 @@ ALTER TABLE transaction
 5. ✅ Place comments on the line before or after the relevant DDL element
 6. ✅ Keep comments concise and technical
 
-### Outbox Pattern
-
-- Save domain changes + outbox events in same transaction
-- If locking row then emitting event after, do both before commit to guarantee atomicity
-
 ## Value Objects and Embeddables
 
 - Use `@Embeddable` for small immutable components (limits, address) and `@AttributeOverride` for multiple instances
@@ -604,6 +599,5 @@ Add method findByStatusAndLifecycleAndAccountId -> existing (status, lifecycle, 
 
 ## References
 
-- `@.github/instructions/event-driven-patterns.instructions.md` — Outbox pattern and event publishing within transactions
 - `@.github/instructions/java-spring-coding-standards.instructions.md` — Java and Spring coding standards for services and repositories
 - `@.github/instructions/pii-protection.instructions.md` — PII-safe entity, query, and logging practices
