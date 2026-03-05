@@ -26,7 +26,6 @@ Implement customer-facing main Demand Deposit Account (DDA) creation as API-driv
 - Given an eligible customer, when `POST /demand-deposit-accounts` is called, then a main DDA is created in `PENDING_VERIFICATION`.
 - Given duplicate idempotency key/reference, when request is repeated, then no duplicate account is created.
 - Given activation criteria are satisfied, when activation flow runs, then account transitions to `ACTIVE` exactly once.
-- Given successful creation/activation, then corresponding events are persisted and published through outbox flow.
 - API returns consistent success and error response structure.
 
 ## Dependencies
@@ -35,4 +34,3 @@ Implement customer-facing main Demand Deposit Account (DDA) creation as API-driv
 ## Test Coverage
 - Controller contract tests for create endpoint.
 - Service tests for idempotency and lifecycle transitions.
-- Integration tests for outbox event persistence/publication.
