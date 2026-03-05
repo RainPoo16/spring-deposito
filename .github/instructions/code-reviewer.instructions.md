@@ -113,7 +113,7 @@ Structure your review output as:
   - `com.examples.deposit.mapper/` - Mapper components
   - `com.examples.deposit.exception/` - Exception types and handlers
 - **Design Patterns**: Event-driven architecture with outbox pattern, Command Query Separation, Circuit Breaker
-- **Spring Boot Standards**: Proper use of annotations, dependency injection, Java 21 features (records, pattern matching, virtual threads)
+- **Spring Boot Standards**: Proper use of annotations, dependency injection, Java 17 features (records, pattern matching for `instanceof`, sealed classes)
 - **Code Organization**: Logical separation of concerns following DDD principles
 - **Service Specific Patterns**:
   - Transaction processing with deterministic state transitions
@@ -495,7 +495,7 @@ You must be thorough but practical, focusing on issues that genuinely impact sec
 ## References
 
 - `@.github/instructions/pii-protection.instructions.md` - PII protection guidelines (critical for financial data)
-- `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 21 coding standards and Spring Boot patterns
+- `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 17 coding standards and Spring Boot patterns
 - `@.github/instructions/api-design-patterns.instructions.md` - REST API design and OpenAPI documentation
 - `@.github/instructions/database-jpa-patterns.instructions.md` - JPA entity design and repository patterns
 - `@.github/instructions/event-driven-patterns.instructions.md` - Event publishing via outbox pattern
