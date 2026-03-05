@@ -15,40 +15,45 @@
   "agent": {
     "Atlas": {
       "mode": "primary",
-      "model": "github-copilot/claude-sonnet-4.6",
+      "model": "github-copilot/gpt-5.2-codex",
       "prompt": "{file:.github/agents/Atlas.agent.md}",
       "variant": "max",
       "color": "#FFC0CB"
     },
     "Prometheus": {
       "mode": "primary",
-      "model": "github-copilot/claude-sonnet-4.6",
+      "model": "github-copilot/gpt-5.2-codex",
       "prompt": "{file:.github/agents/Prometheus.agent.md}",
       "variant": "max",
       "color": "#00FFFF"
     },
     "Code-Review-subagent": {
       "mode": "subagent",
+      "model": "github-copilot/gpt-5.2-codex",
       "hidden": true,
       "prompt": "{file:.github/agents/Code-Review-subagent.agent.md}"
     },
     "Explorer-subagent": {
       "mode": "subagent",
+      "model": "github-copilot/gemini-3-flash-preview",
       "hidden": true,
       "prompt": "{file:.github/agents/Explorer-subagent.agent.md}"
     },
     "Frontend-Engineer-subagent": {
       "mode": "subagent",
+      "model": "github-copilot/gemini-3.1-pro-preview",
       "hidden": true,
       "prompt": "{file:.github/agents/Frontend-Engineer-subagent.agent.md}"
     },
     "Oracle-subagent": {
       "mode": "subagent",
+      "model": "github-copilot/gpt-5.2-codex",
       "hidden": true,
       "prompt": "{file:.github/agents/Oracle-subagent.agent.md}"
     },
     "Sisyphus-subagent": {
       "mode": "subagent",
+      "model": "github-copilot/gpt-5.2-codex",
       "hidden": true,
       "prompt": "{file:.github/agents/Sisyphus-subagent.agent.md}"
     }
