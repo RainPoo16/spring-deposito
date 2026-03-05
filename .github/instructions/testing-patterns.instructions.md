@@ -171,8 +171,6 @@ Before finalizing a test:
 
 - All tests (Maven): `./mvnw test`
 - Single spec (Maven): `./mvnw test -Dtest=AccountControllerSpec`
-- All tests (Gradle): `./gradlew test`
-- Single spec (Gradle): `./gradlew test --tests '*AccountControllerSpec'`
 
 ## 16) Test Scope and Organization
 
