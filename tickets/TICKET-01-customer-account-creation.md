@@ -5,11 +5,9 @@ Implement customer-facing main Demand Deposit Account (DDA) creation as API-driv
 
 ## Scope
 - Add customer endpoint: `POST /demand-deposit-accounts`.
-- Validate customer eligibility and supported product type.
 - Enforce idempotency for account creation requests.
 - Create main DDA with initial status `PENDING_VERIFICATION`.
 - Implement activation transition to `ACTIVE` when criteria are met.
-- Publish account creation and activation events for downstream consumers.
 
 ## Out of Scope
 - Child pocket creation changes (existing endpoint remains).
