@@ -186,11 +186,6 @@ RestClient.Builder restClientBuilder() { return RestClient.builder(); }
 - Fallback static credentials with `@ConditionalOnMissingBean`
 - Avoid loading secrets for test profile (`@Profile("!test")`)
 
-## Observability & Metrics
-- Use consistent metric tags: `application`, `ryt.common.metric.source`
-- Percentile histograms enabled globally (`management.metrics.distribution.percentiles-histogram.all = true`)
-- Set SLO buckets via `management.metrics.distribution.slo.all`
-
 ## Database & Pooling
 - Hikari properties: set explicit connection, idle, max pool size via env defaults
 - Disable Open Session in View: `spring.jpa.open-in-view=false`
