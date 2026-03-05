@@ -1,6 +1,6 @@
 # Bank Deposit Service
 
-A REST-first bank deposit microservice built with Spring Boot 4.0 and Java 21.
+A REST-first bank deposit microservice built with Spring Boot 4.0 and Java 17.
 
 ## Quick Start
 
@@ -21,26 +21,13 @@ docker compose up -d
 
 ## Prerequisites
 
-- Install **JDK 21**
+- Install **JDK 17**
 - No Maven installation needed (use the project Maven Wrapper: `./mvnw`)
 - Install **Docker Desktop** only if you want to:
 	- run PostgreSQL locally with Docker Compose, or
 	- run tests that require Testcontainers
 
 If you only want to build without tests, Docker is optional.
-
-## API Endpoints
-
-### Customer Operations
-- `POST /api/accounts` — Open a new account
-- `GET /api/accounts/{accountNumber}` — Get account details
-- `POST /api/accounts/{accountNumber}/credit` — Deposit funds
-- `POST /api/accounts/{accountNumber}/debit` — Withdraw funds
-
-### Admin Operations
-- `POST /api/admin/accounts/{accountNumber}/freeze` — Freeze account
-- `POST /api/admin/accounts/{accountNumber}/unfreeze` — Unfreeze account
-- `POST /api/admin/accounts/{accountNumber}/close` — Close account
 
 ## Running Locally
 

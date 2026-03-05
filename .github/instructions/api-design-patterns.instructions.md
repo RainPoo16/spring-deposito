@@ -503,6 +503,6 @@ After creating endpoints, register them in the appropriate test service client f
 ## References
 
 - `@.github/instructions/pii-protection.instructions.md` - PII protection guidelines for logging and data handling
-- `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 21 coding standards and Spring Boot patterns
+- `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 17 coding standards and Spring Boot patterns
 - `@.github/instructions/database-jpa-patterns.instructions.md` - JPA entity and repository patterns for API persistence boundaries
 - `@.github/instructions/configuration-patterns.instructions.md` - Spring profile and configuration property patterns

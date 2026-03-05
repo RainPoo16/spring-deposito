@@ -240,5 +240,5 @@ Pattern: `<domain>.<capability>[.<sub-capability>].enabled = ${ENV_VAR:false}`
 
 ## References
 
-- `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 21 coding standards and Spring Boot patterns
+- `@.github/instructions/java-spring-coding-standards.instructions.md` - Java 17 coding standards and Spring Boot patterns
 - `@.github/instructions/pii-protection.instructions.md` - PII protection guidelines

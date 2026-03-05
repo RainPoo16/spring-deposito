@@ -1,6 +1,6 @@
 ---
 name: 'Java Spring Coding Standards'
-description: 'Java 21 coding standards, Spring Boot patterns, dependency injection, error handling, and logging best practices'
+description: 'Java 17 coding standards, Spring Boot patterns, dependency injection, error handling, and logging best practices'
 applyTo: '**/*.java'
 ---
 # Java and Spring Boot Coding Standards
@@ -18,7 +18,7 @@ applyTo: '**/*.java'
 ## General Java Standards
 
 ### Code Organization
-- Use Java 21 features where appropriate (pattern matching, records, etc.)
+- Use Java 17 language features where appropriate (records, sealed classes, pattern matching for `instanceof`)
 - Follow standard Java package naming: `com.examples.deposit.<layer>`
 - Organize code in layers: `controller`, `service`, `repository`, `domain`, `config`, `mapper`, `exception`, `handler`
 - Use `domain` package for JPA entities (not `model`)
