@@ -56,4 +56,22 @@ class DemandDepositAccountRepositorySpec extends Specification {
         then:
         updated.version == originalVersion + 1
     }
+
+    def "findByIdAndCustomerId returns account only for matching owner"() {
+        given:
+        UUID ownerCustomerId = UUID.randomUUID()
+        UUID anotherCustomerId = UUID.randomUUID()
+        DemandDepositAccount persisted = demandDepositAccountRepository.saveAndFlush(
+            DemandDepositAccount.create(ownerCustomerId, DemandDepositAccountStatus.PENDING_VERIFICATION)
+        )
+
+        when:
+        def foundForOwner = demandDepositAccountRepository.findByIdAndCustomerId(persisted.id, ownerCustomerId)
+        def foundForAnotherCustomer = demandDepositAccountRepository.findByIdAndCustomerId(persisted.id, anotherCustomerId)
+
+        then:
+        foundForOwner.isPresent()
+        foundForOwner.get().id == persisted.id
+        foundForAnotherCustomer.isEmpty()
+    }
 }

@@ -1,6 +1,10 @@
 package com.examples.deposit.controller.exception;
 
 import com.examples.deposit.domain.exception.CustomerNotEligibleForAccountCreationException;
+import com.examples.deposit.domain.exception.AccountNotFoundException;
+import com.examples.deposit.domain.exception.BlockNotFoundException;
+import com.examples.deposit.domain.exception.BlockNotEligibleForOperationException;
+import com.examples.deposit.domain.exception.DuplicateOrOverlappingBlockException;
 import com.examples.deposit.domain.exception.IdempotencyConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -38,6 +42,34 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(409)
             .contentType(MediaType.APPLICATION_PROBLEM_JSON)
             .body(apiProblemFactory.idempotencyConflict());
+    }
+
+    @ExceptionHandler(DuplicateOrOverlappingBlockException.class)
+    public ResponseEntity<ProblemDetail> handleDuplicateOrOverlappingBlock(DuplicateOrOverlappingBlockException ignored) {
+        return ResponseEntity.unprocessableEntity()
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(apiProblemFactory.duplicateOrOverlappingBlock());
+    }
+
+    @ExceptionHandler(BlockNotEligibleForOperationException.class)
+    public ResponseEntity<ProblemDetail> handleBlockNotEligible(BlockNotEligibleForOperationException ignored) {
+        return ResponseEntity.unprocessableEntity()
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(apiProblemFactory.blockNotEligibleForOperation());
+    }
+
+    @ExceptionHandler(AccountNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleAccountNotFound(AccountNotFoundException ignored) {
+        return ResponseEntity.status(404)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(apiProblemFactory.accountNotFound());
+    }
+
+    @ExceptionHandler(BlockNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleBlockNotFound(BlockNotFoundException ignored) {
+        return ResponseEntity.status(404)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(apiProblemFactory.blockNotFound());
     }
 
     @ExceptionHandler({
