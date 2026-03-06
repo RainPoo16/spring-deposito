@@ -21,6 +21,9 @@ import com.examples.deposit.service.DemandDepositAccountBlockService
 import com.examples.deposit.service.DemandDepositAccountService
 import com.examples.deposit.service.DemandDepositAccountTransactionService
 import com.examples.deposit.service.dto.PostedTransactionResult
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponses
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.context.annotation.Import
@@ -29,6 +32,7 @@ import org.springframework.test.web.servlet.MockMvc
 import spock.lang.Specification
 
 import java.util.UUID
+import java.lang.reflect.Method
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -55,6 +59,113 @@ class DemandDepositAccountControllerSpec extends Specification {
 
     @org.spockframework.spring.SpringBean
     DemandDepositAccountTransactionService demandDepositAccountTransactionService = Mock()
+
+    def "documents all mutation endpoints with explicit operation and api responses"() {
+        expect:
+        hasOperationAndApiResponses('createDemandDepositAccount', UUID, com.examples.deposit.controller.dto.CreateDemandDepositAccountReq)
+        hasOperationAndApiResponses('createDemandDepositAccountBlock', UUID, UUID, com.examples.deposit.controller.dto.CreateDemandDepositAccountBlockReq)
+        hasOperationAndApiResponses('postCreditTransaction', UUID, com.examples.deposit.controller.dto.PostCreditTransactionReq)
+        hasOperationAndApiResponses('postDebitTransaction', UUID, com.examples.deposit.controller.dto.PostDebitTransactionReq)
+    }
+
+    def "documents 4xx and 5xx responses with problem detail schema and examples"() {
+        expect:
+        hasProblemDetailSchemaAndExampleForErrorResponses('createDemandDepositAccount', ["400", "409", "422", "500"], UUID, com.examples.deposit.controller.dto.CreateDemandDepositAccountReq)
+        hasProblemDetailSchemaAndExampleForErrorResponses('createDemandDepositAccountBlock', ["400", "404", "422", "500"], UUID, UUID, com.examples.deposit.controller.dto.CreateDemandDepositAccountBlockReq)
+        hasProblemDetailSchemaAndExampleForErrorResponses('postCreditTransaction', ["400", "404", "409", "422", "500"], UUID, com.examples.deposit.controller.dto.PostCreditTransactionReq)
+        hasProblemDetailSchemaAndExampleForErrorResponses('postDebitTransaction', ["400", "404", "409", "422", "500"], UUID, com.examples.deposit.controller.dto.PostDebitTransactionReq)
+    }
+
+    def "documents representative success and error examples for mutation endpoints"() {
+        expect:
+        hasExamplesForResponses('createDemandDepositAccount', ["201", "400"], UUID, com.examples.deposit.controller.dto.CreateDemandDepositAccountReq)
+        hasExamplesForResponses('createDemandDepositAccountBlock', ["201", "404", "422"], UUID, UUID, com.examples.deposit.controller.dto.CreateDemandDepositAccountBlockReq)
+        hasExamplesForResponses('postCreditTransaction', ["201", "422"], UUID, com.examples.deposit.controller.dto.PostCreditTransactionReq)
+        hasExamplesForResponses('postDebitTransaction', ["201", "422"], UUID, com.examples.deposit.controller.dto.PostDebitTransactionReq)
+    }
+
+    def "documents canonical problem detail fields for selected shared error examples"() {
+        expect:
+        hasProblemDetailExampleFields(
+            'createDemandDepositAccount',
+            '409',
+            'idempotency-conflict',
+            'deposit/idempotency-conflict',
+            'Idempotency conflict',
+            409,
+            'Unable to resolve idempotent account creation request',
+            UUID,
+            com.examples.deposit.controller.dto.CreateDemandDepositAccountReq
+        )
+        hasProblemDetailExampleFields(
+            'postCreditTransaction',
+            '404',
+            'account-not-found',
+            'deposit/account-not-found',
+            'Account not found',
+            404,
+            'Demand deposit account was not found',
+            UUID,
+            com.examples.deposit.controller.dto.PostCreditTransactionReq
+        )
+        hasProblemDetailExampleFields(
+            'postCreditTransaction',
+            '409',
+            'transaction-idempotency-conflict',
+            'deposit/transaction-idempotency-conflict',
+            'Transaction idempotency conflict',
+            409,
+            'Unable to resolve idempotent transaction request',
+            UUID,
+            com.examples.deposit.controller.dto.PostCreditTransactionReq
+        )
+        hasProblemDetailExampleFields(
+            'postDebitTransaction',
+            '404',
+            'account-not-found',
+            'deposit/account-not-found',
+            'Account not found',
+            404,
+            'Demand deposit account was not found',
+            UUID,
+            com.examples.deposit.controller.dto.PostDebitTransactionReq
+        )
+        hasProblemDetailExampleFields(
+            'postDebitTransaction',
+            '409',
+            'transaction-idempotency-conflict',
+            'deposit/transaction-idempotency-conflict',
+            'Transaction idempotency conflict',
+            409,
+            'Unable to resolve idempotent transaction request',
+            UUID,
+            com.examples.deposit.controller.dto.PostDebitTransactionReq
+        )
+        hasProblemDetailExampleFields(
+            'createDemandDepositAccountBlock',
+            '422',
+            'duplicate-or-overlapping-block',
+            'deposit/duplicate-or-overlapping-block',
+            'Duplicate or overlapping block',
+            422,
+            'An active or pending block with the same code overlaps the requested period',
+            UUID,
+            UUID,
+            com.examples.deposit.controller.dto.CreateDemandDepositAccountBlockReq
+        )
+        hasProblemDetailExampleFields(
+            'createDemandDepositAccountBlock',
+            '422',
+            'block-not-eligible',
+            'deposit/block-not-eligible-for-operation',
+            'Block not eligible for operation',
+            422,
+            'Block state or initiator is not eligible for the requested operation',
+            UUID,
+            UUID,
+            com.examples.deposit.controller.dto.CreateDemandDepositAccountBlockReq
+        )
+    }
 
     def "posts credit transaction and returns 201 with JSON payload"() {
         given:
@@ -241,6 +352,8 @@ class DemandDepositAccountControllerSpec extends Specification {
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath('$.status').value(422))
             .andExpect(jsonPath('$.type').value('deposit/transaction-blocked'))
+            .andExpect(jsonPath('$.title').value('Transaction blocked'))
+            .andExpect(jsonPath('$.detail').value('Transaction is blocked by active account restrictions'))
         statusResult.andExpect(status().isUnprocessableEntity())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath('$.status').value(422))
@@ -249,6 +362,8 @@ class DemandDepositAccountControllerSpec extends Specification {
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath('$.status').value(422))
             .andExpect(jsonPath('$.type').value('deposit/insufficient-available-balance'))
+            .andExpect(jsonPath('$.title').value('Insufficient available balance'))
+            .andExpect(jsonPath('$.detail').value('Available balance is insufficient for the requested debit'))
         idempotencyResult.andExpect(status().isConflict())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
             .andExpect(jsonPath('$.status').value(409))
@@ -687,5 +802,83 @@ class DemandDepositAccountControllerSpec extends Specification {
             .andExpect(jsonPath('$.title').value('Malformed request'))
             .andExpect(jsonPath('$.type').value('deposit/malformed-request'))
             .andExpect(jsonPath('$.detail').value('Request headers or payload are invalid'))
+    }
+
+    private static boolean hasOperationAndApiResponses(String methodName, Object... parameterTypes) {
+        Method method = DemandDepositAccountController.getDeclaredMethod(methodName, parameterTypes as Class[])
+        method.getAnnotation(Operation) != null && method.getAnnotation(ApiResponses) != null
+    }
+
+    private static boolean hasProblemDetailSchemaAndExampleForErrorResponses(String methodName, List<String> responseCodes, Object... parameterTypes) {
+        Method method = DemandDepositAccountController.getDeclaredMethod(methodName, parameterTypes as Class[])
+        def apiResponses = method.getAnnotation(ApiResponses)
+        if (apiResponses == null) {
+            return false
+        }
+
+        responseCodes.every { code ->
+            def apiResponse = apiResponses.value().find { it.responseCode() == code }
+            if (apiResponse == null || apiResponse.content().length == 0) {
+                return false
+            }
+
+            apiResponse.content().any { content ->
+                Schema schema = content.schema()
+                schema?.implementation() == org.springframework.http.ProblemDetail && content.examples().length > 0
+            }
+        }
+    }
+
+    private static boolean hasExamplesForResponses(String methodName, List<String> responseCodes, Object... parameterTypes) {
+        Method method = DemandDepositAccountController.getDeclaredMethod(methodName, parameterTypes as Class[])
+        def apiResponses = method.getAnnotation(ApiResponses)
+        if (apiResponses == null) {
+            return false
+        }
+
+        responseCodes.every { code ->
+            def apiResponse = apiResponses.value().find { it.responseCode() == code }
+            apiResponse != null && apiResponse.content().length > 0 && apiResponse.content().any { it.examples().length > 0 }
+        }
+    }
+
+    private static boolean hasProblemDetailExampleFields(
+        String methodName,
+        String responseCode,
+        String exampleName,
+        String expectedType,
+        String expectedTitle,
+        int expectedStatus,
+        String expectedDetail,
+        Object... parameterTypes
+    ) {
+        Method method = DemandDepositAccountController.getDeclaredMethod(methodName, parameterTypes as Class[])
+        def apiResponses = method.getAnnotation(ApiResponses)
+        if (apiResponses == null) {
+            return false
+        }
+
+        def apiResponse = apiResponses.value().find { it.responseCode() == responseCode }
+        if (apiResponse == null) {
+            return false
+        }
+
+        def contentWithExample = apiResponse.content().find { content ->
+            content.examples().any { it.name() == exampleName }
+        }
+        if (contentWithExample == null) {
+            return false
+        }
+
+        def example = contentWithExample.examples().find { it.name() == exampleName }
+        if (example == null || !example.value()) {
+            return false
+        }
+
+        String value = example.value()
+        value.contains("\"type\": \"${expectedType}\"") &&
+            value.contains("\"title\": \"${expectedTitle}\"") &&
+            value.contains("\"status\": ${expectedStatus}") &&
+            value.contains("\"detail\": \"${expectedDetail}\"")
     }
 }

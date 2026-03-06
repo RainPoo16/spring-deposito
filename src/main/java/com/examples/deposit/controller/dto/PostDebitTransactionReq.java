@@ -16,7 +16,8 @@ public record PostDebitTransactionReq(
     @DecimalMin(value = "0.01", message = "amount must be greater than 0")
     BigDecimal amount,
     @NotBlank(message = "transactionCode is required")
-    @Pattern(regexp = "^[A-Z]{3}$", message = "transactionCode must be 3 uppercase letters")
+    @Size(max = 64, message = "transactionCode must be at most 64 characters")
+    @Pattern(regexp = "^[A-Z]+(?:_[A-Z]+)*$", message = "transactionCode must be uppercase letters with optional underscores")
     String transactionCode,
     @NotBlank(message = "referenceId is required")
     @Size(max = 128, message = "referenceId must be at most 128 characters")

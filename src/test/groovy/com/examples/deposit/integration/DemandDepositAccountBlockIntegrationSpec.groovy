@@ -134,7 +134,112 @@ class DemandDepositAccountBlockIntegrationSpec extends Specification {
         demandDepositAccountBlockRepository.count() == 1
     }
 
-    def "update and cancel flow persists lifecycle transitions correctly"() {
+    def "foreign customer cannot create block on another customer's account"() {
+        given:
+        UUID ownerCustomerId = UUID.fromString("21000000-0000-0000-0000-000000000005")
+        UUID foreignCustomerId = UUID.fromString("21000000-0000-0000-0000-000000000006")
+        UUID accountId = createAccount(ownerCustomerId, "it-block-foreign-owner-001")
+
+        when:
+        def result = createBlock(foreignCustomerId, accountId, '''
+            {
+              "blockCode": "ACC",
+              "effectiveDate": "2026-03-12",
+              "expiryDate": "2026-03-22",
+              "remark": "foreign customer"
+            }
+        ''')
+
+        then:
+        result.andExpect(status().isNotFound())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.type').value('deposit/account-not-found'))
+            .andExpect(jsonPath('$.title').value('Account not found'))
+            .andExpect(jsonPath('$.status').value(404))
+            .andExpect(jsonPath('$.detail').value('Demand deposit account was not found'))
+
+        and:
+        demandDepositAccountBlockRepository.count() == 0
+    }
+
+    def "create block on non-existent account returns 404 account-not-found"() {
+        given:
+        UUID customerId = UUID.fromString("21000000-0000-0000-0000-000000000007")
+        UUID missingAccountId = UUID.fromString("22000000-0000-0000-0000-000000000001")
+
+        when:
+        def result = createBlock(customerId, missingAccountId, '''
+            {
+              "blockCode": "ACC",
+              "effectiveDate": "2026-03-12",
+              "expiryDate": "2026-03-22",
+              "remark": "missing account"
+            }
+        ''')
+
+        then:
+        result.andExpect(status().isNotFound())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.type').value('deposit/account-not-found'))
+            .andExpect(jsonPath('$.title').value('Account not found'))
+            .andExpect(jsonPath('$.status').value(404))
+            .andExpect(jsonPath('$.detail').value('Demand deposit account was not found'))
+
+        and:
+        demandDepositAccountBlockRepository.count() == 0
+    }
+
+    def "foreign customer cannot update or cancel another customer's block"() {
+        given:
+        UUID ownerCustomerId = UUID.fromString("21000000-0000-0000-0000-000000000008")
+        UUID foreignCustomerId = UUID.fromString("21000000-0000-0000-0000-000000000009")
+        UUID accountId = createAccount(ownerCustomerId, "it-block-foreign-update-cancel-create-001")
+
+        createBlock(ownerCustomerId, accountId, '''
+            {
+              "blockCode": "ACC",
+              "effectiveDate": "2026-03-12",
+              "expiryDate": "2026-03-22",
+              "remark": "owner-created"
+            }
+        ''').andExpect(status().isCreated())
+        UUID blockId = demandDepositAccountBlockRepository.findAll().first().id
+
+        when:
+        def updateResult = mockMvc.perform(put("/demand-deposit-accounts/${accountId}/blocks/${blockId}")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-customer-id", foreignCustomerId.toString())
+            .content('''
+                {
+                  "effectiveDate": "2026-03-13",
+                  "expiryDate": "2026-03-24",
+                  "remark": "foreign update"
+                }
+            '''))
+        def cancelResult = mockMvc.perform(patch("/demand-deposit-accounts/${accountId}/blocks/${blockId}/cancel")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-customer-id", foreignCustomerId.toString()))
+
+        then:
+        updateResult.andExpect(status().isNotFound())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.type').value('deposit/account-not-found'))
+            .andExpect(jsonPath('$.title').value('Account not found'))
+            .andExpect(jsonPath('$.status').value(404))
+            .andExpect(jsonPath('$.detail').value('Demand deposit account was not found'))
+
+        cancelResult.andExpect(status().isNotFound())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.type').value('deposit/account-not-found'))
+            .andExpect(jsonPath('$.title').value('Account not found'))
+            .andExpect(jsonPath('$.status').value(404))
+            .andExpect(jsonPath('$.detail').value('Demand deposit account was not found'))
+
+        and:
+        demandDepositAccountBlockRepository.findById(blockId).orElseThrow().status == AccountBlockStatus.PENDING
+    }
+
+    def "block status lifecycle transitions are persisted and queryable"() {
         given:
         UUID customerId = UUID.fromString("21000000-0000-0000-0000-000000000003")
         UUID accountId = createAccount(customerId, "it-block-update-cancel-001")
@@ -148,6 +253,8 @@ class DemandDepositAccountBlockIntegrationSpec extends Specification {
             }
                 ''').andExpect(status().isCreated())
                 UUID blockId = demandDepositAccountBlockRepository.findAll().first().id
+            def createdPersisted = demandDepositAccountBlockRepository.findById(blockId).orElseThrow()
+            Long createVersion = createdPersisted.version
 
         when:
         def updateResult = mockMvc.perform(put("/demand-deposit-accounts/${accountId}/blocks/${blockId}")
@@ -172,10 +279,15 @@ class DemandDepositAccountBlockIntegrationSpec extends Specification {
 
         and:
         def updatedPersisted = demandDepositAccountBlockRepository.findById(blockId).orElseThrow()
+        createdPersisted.status == AccountBlockStatus.PENDING
+        createdPersisted.version == createVersion
+        updatedPersisted.id == blockId
         updatedPersisted.status == AccountBlockStatus.PENDING
         updatedPersisted.effectiveDate == LocalDate.of(2026, 3, 13)
         updatedPersisted.expiryDate == LocalDate.of(2026, 3, 24)
         updatedPersisted.remark == 'after update'
+        updatedPersisted.version == createVersion + 1
+        demandDepositAccountBlockRepository.count() == 1
 
         when:
         def cancelResult = mockMvc.perform(patch("/demand-deposit-accounts/${accountId}/blocks/${blockId}/cancel")
@@ -187,7 +299,14 @@ class DemandDepositAccountBlockIntegrationSpec extends Specification {
             .andExpect(content().string(''))
 
         and:
-        demandDepositAccountBlockRepository.findById(blockId).orElseThrow().status == AccountBlockStatus.CANCELLED
+        def cancelledPersisted = demandDepositAccountBlockRepository.findById(blockId).orElseThrow()
+        cancelledPersisted.id == blockId
+        cancelledPersisted.status == AccountBlockStatus.CANCELLED
+        cancelledPersisted.effectiveDate == LocalDate.of(2026, 3, 13)
+        cancelledPersisted.expiryDate == LocalDate.of(2026, 3, 24)
+        cancelledPersisted.remark == 'after update'
+        cancelledPersisted.version == createVersion + 2
+        demandDepositAccountBlockRepository.count() == 1
     }
 
     def "malformed and business-rule violations return consistent problem details"() {

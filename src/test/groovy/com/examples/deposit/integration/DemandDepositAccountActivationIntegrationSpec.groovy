@@ -36,7 +36,7 @@ class DemandDepositAccountActivationIntegrationSpec extends Specification {
         demandDepositAccountRepository.deleteAll()
     }
 
-    def "activation flow transitions pending account to active only once"() {
+    def "status transition is persisted exactly once for activation flow"() {
         given:
         UUID customerId = UUID.fromString("10000000-0000-0000-0000-000000000002")
 
@@ -50,18 +50,26 @@ class DemandDepositAccountActivationIntegrationSpec extends Specification {
             .andExpect(jsonPath('$.status').value('PENDING_VERIFICATION'))
             .andReturn()
 
-        UUID accountUuid = demandDepositAccountRepository.findByCustomerId(customerId).orElseThrow().id
-        Long initialVersion = demandDepositAccountRepository.findById(accountUuid).orElseThrow().version
+        def createdPersisted = demandDepositAccountRepository.findByCustomerId(customerId).orElseThrow()
+        UUID accountUuid = createdPersisted.id
+        Long initialVersion = createdPersisted.version
 
         when:
         def firstActivation = demandDepositAccountService.activateAccountIfEligible(accountUuid)
+        def afterFirstActivation = demandDepositAccountRepository.findById(accountUuid).orElseThrow()
         def secondActivation = demandDepositAccountService.activateAccountIfEligible(accountUuid)
         def reloaded = demandDepositAccountRepository.findById(accountUuid).orElseThrow()
 
         then:
+        createdPersisted.status.name() == 'PENDING_VERIFICATION'
         firstActivation.status.name() == 'ACTIVE'
+        afterFirstActivation.status.name() == 'ACTIVE'
         secondActivation.status.name() == 'ACTIVE'
         reloaded.status.name() == 'ACTIVE'
+        firstActivation.version == initialVersion + 1
+        afterFirstActivation.version == initialVersion + 1
+        secondActivation.version == initialVersion + 1
         reloaded.version == initialVersion + 1
+        demandDepositAccountRepository.count() == 1
     }
 }
