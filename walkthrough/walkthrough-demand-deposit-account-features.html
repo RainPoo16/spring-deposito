@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en" style="color-scheme: dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Walkthrough: Demand Deposit Account Features</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          wt: {
+            bg: '#000000',
+            surface: '#0a0a0a',
+            raised: '#141414',
+            border: '#2a2a2a',
+            fg: '#ffffff',
+            muted: '#a0a0a0',
+            accent: '#a855f7',
+            file: '#c084fc',
+            red: '#ef4444',
+          },
+          node: {
+            component: '#a855f7',
+            composable: '#7c3aed',
+            utility: '#6d28d9',
+            external: '#525252',
+            event: '#d8b4fe',
+            data: '#9333ea',
+          },
+        },
+      },
+    },
+  };
+</script>
+<style>
+  .mermaid-wrap svg { max-width: none !important; height: auto !important; }
+  .mermaid-wrap .node { cursor: pointer; }
+  .mermaid-wrap .node:hover rect,
+  .mermaid-wrap .node:hover polygon,
+  .mermaid-wrap .node:hover circle,
+  .mermaid-wrap .node:hover .label-container {
+    filter: brightness(1.3);
+    transition: filter .15s;
+  }
+
+  .dt-body p {
+    color: #a0a0a0;
+    font-size: .88rem;
+    line-height: 1.65;
+    margin-bottom: 10px;
+  }
+
+  .dt-body p code {
+    background: rgba(168,85,247,.12);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: .82rem;
+    color: #c084fc;
+  }
+
+  .dt-body .shiki,
+  .dt-body pre.code-fallback {
+    background: #000000;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 8px 0 14px;
+  }
+
+  .dt-body .shiki { background: #000000 !important; }
+
+  .dt-body .shiki code,
+  .dt-body pre.code-fallback code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: .78rem;
+    line-height: 1.55;
+    background: none;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  .dt-body .shiki code { color: inherit; }
+  .dt-body pre.code-fallback code { color: #e0e0e0; }
+</style>
+</head>
+<body class="bg-wt-bg text-wt-fg m-0 overflow-hidden">
+<div id="root"></div>
+<script type="module">
+import { createHighlighter } from 'https://cdn.jsdelivr.net/npm/shiki@3.22.0/+esm';
+
+const { useState, useEffect, useRef, useCallback } = window.React;
+const h = window.React.createElement;
+
+const SUMMARY = "Demand deposit features run through one API gateway that delegates into three core tracks: account lifecycle, block lifecycle, and transaction posting. Transaction posting combines account status rules, directional block checks, and idempotency replay protection before any balance mutation is committed. Integration specs keep these flows stable by exercising activation, block transitions, and debit-credit enforcement end to end.";
+
+const DIAGRAM = `graph LR
+  subgraph apiEntry["API Entry"]
+    apiGateway["Demand Deposit API"]
+    requestContracts["Request and Response Contracts"]
+  end
+
+  subgraph accountState["Account Lifecycle"]
+    accountService["Account Lifecycle Service"]
+    accountAggregate["Account State Machine"]
+    statusPolicy["Status and Transaction Policy"]
+  end
+
+  subgraph controls["Posting and Restriction Controls"]
+    blockService["Block Lifecycle Service"]
+    postingService["Transaction Posting Service"]
+    idempotencyLedger["Idempotency Ledger"]
+  end
+
+  subgraph storage["Storage and Safety Net"]
+    repositories["Account and Transaction Repositories"]
+    regressionSpecs["Integration Regression Specs"]
+  end
+
+  apiGateway -->|"maps payloads"| requestContracts
+  apiGateway -->|"routes commands"| accountService
+  apiGateway -->|"routes commands"| blockService
+  apiGateway -->|"routes commands"| postingService
+
+  accountService -->|"applies lifecycle"| accountAggregate
+  accountService -->|"loads and saves"| repositories
+  accountAggregate -.->|"checks rules"| statusPolicy
+
+  blockService -->|"persists block states"| repositories
+  blockService -->|"feeds restrictions to"| postingService
+
+  postingService -.->|"checks restrictions"| statusPolicy
+  postingService -->|"locks and persists"| repositories
+  postingService -->|"deduplicates with"| idempotencyLedger
+  idempotencyLedger -->|"links replay requests"| repositories
+
+  regressionSpecs -.->|"verifies behavior of"| apiGateway
+  regressionSpecs -.->|"verifies behavior of"| blockService
+  regressionSpecs -.->|"verifies behavior of"| postingService
+
+  class apiGateway component
+  class requestContracts data
+  class accountService composable
+  class accountAggregate data
+  class statusPolicy utility
+  class blockService composable
+  class postingService composable
+  class idempotencyLedger data
+  class repositories external
+  class regressionSpecs event
+
+  classDef component fill:#a855f7,stroke:#c084fc,color:#fff
+  classDef composable fill:#7c3aed,stroke:#a78bfa,color:#fff
+  classDef utility fill:#6d28d9,stroke:#8b5cf6,color:#fff
+  classDef external fill:#525252,stroke:#737373,color:#fff
+  classDef event fill:#d8b4fe,stroke:#e9d5ff,color:#000
+  classDef data fill:#9333ea,stroke:#a855f7,color:#fff
+
+  click apiGateway nodeClickHandler "View details"
+  click requestContracts nodeClickHandler "View details"
+  click accountService nodeClickHandler "View details"
+  click accountAggregate nodeClickHandler "View details"
+  click statusPolicy nodeClickHandler "View details"
+  click blockService nodeClickHandler "View details"
+  click postingService nodeClickHandler "View details"
+  click idempotencyLedger nodeClickHandler "View details"
+  click repositories nodeClickHandler "View details"
+  click regressionSpecs nodeClickHandler "View details"
+`;
+
+const NODES = {
+  apiGateway: {
+    title: "Demand Deposit API",
+    description: "The controller is the single HTTP entrypoint for account creation, posting credit and debit transactions, and block lifecycle operations. It translates headers and request DTOs into service commands and returns ProblemDetail-aware responses.",
+    files: [
+      "src/main/java/com/examples/deposit/controller/DemandDepositAccountController.java"
+    ]
+  },
+  requestContracts: {
+    title: "Request and Response Contracts",
+    description: "Dedicated DTO records keep the API contract explicit for each operation so validation and response shapes stay stable. This isolates transport concerns from domain entities.",
+    files: [
+      "src/main/java/com/examples/deposit/controller/dto/CreateDemandDepositAccountReq.java",
+      "src/main/java/com/examples/deposit/controller/dto/CreateDemandDepositAccountResp.java",
+      "src/main/java/com/examples/deposit/controller/dto/PostCreditTransactionReq.java",
+      "src/main/java/com/examples/deposit/controller/dto/PostCreditTransactionResp.java",
+      "src/main/java/com/examples/deposit/controller/dto/PostDebitTransactionReq.java",
+      "src/main/java/com/examples/deposit/controller/dto/PostDebitTransactionResp.java",
+      "src/main/java/com/examples/deposit/controller/dto/CreateDemandDepositAccountBlockReq.java",
+      "src/main/java/com/examples/deposit/controller/dto/CreateDemandDepositAccountBlockResp.java",
+      "src/main/java/com/examples/deposit/controller/dto/UpdateDemandDepositAccountBlockReq.java",
+      "src/main/java/com/examples/deposit/controller/dto/UpdateDemandDepositAccountBlockResp.java"
+    ]
+  },
+  accountService: {
+    title: "Account Lifecycle Service",
+    description: "This service orchestrates account creation and activation eligibility, then persists state changes through the account repository. It is the transaction boundary for lifecycle operations.",
+    files: [
+      "src/main/java/com/examples/deposit/service/DemandDepositAccountService.java"
+    ]
+  },
+  accountAggregate: {
+    title: "Account State Machine",
+    description: "The domain aggregate owns lifecycle transitions and balance mutation invariants, including activation rules and amount checks. Business validity is enforced here before data is persisted.",
+    files: [
+      "src/main/java/com/examples/deposit/domain/DemandDepositAccount.java"
+    ],
+    code: `public boolean activate() {
+    if (this.status == DemandDepositAccountStatus.ACTIVE) return false;
+    if (this.status != DemandDepositAccountStatus.PENDING_VERIFICATION)
+        throw new InvalidAccountLifecycleTransitionException(id, this.status, DemandDepositAccountStatus.ACTIVE);
+    this.status = DemandDepositAccountStatus.ACTIVE;
+}`,
+    lang: "java"
+  },
+  statusPolicy: {
+    title: "Status and Transaction Policy",
+    description: "Status enums and transaction code policy define which operations are allowed in each account state, including special handling for pending verification and dormant accounts. Posting logic uses this policy before mutation.",
+    files: [
+      "src/main/java/com/examples/deposit/domain/DemandDepositAccountStatus.java",
+      "src/main/java/com/examples/deposit/domain/TransactionCodePolicy.java",
+      "src/main/java/com/examples/deposit/domain/TransactionValidationMode.java"
+    ]
+  },
+  blockService: {
+    title: "Block Lifecycle Service",
+    description: "Block service creates, updates, and cancels account restrictions while enforcing overlap and eligibility rules. Its output directly influences whether transaction posting can proceed.",
+    files: [
+      "src/main/java/com/examples/deposit/service/DemandDepositAccountBlockService.java",
+      "src/main/java/com/examples/deposit/domain/DemandDepositAccountBlock.java",
+      "src/main/java/com/examples/deposit/domain/BlockCode.java",
+      "src/main/java/com/examples/deposit/domain/AccountBlockStatus.java"
+    ],
+    code: `if (demandDepositAccountBlockRepository.existsOverlappingActiveOrPendingBlock(
+    account.getId(), blockCode, command.effectiveDate(), command.expiryDate()
+)) {
+    throw new DuplicateOrOverlappingBlockException(account.getId(), blockCode.name());
+}`,
+    lang: "java"
+  },
+  postingService: {
+    title: "Transaction Posting Service",
+    description: "Credit and debit posting runs under a lock-first workflow: load account for update, resolve idempotency replay, enforce block restrictions, then persist transaction and balances. This keeps posting deterministic and race-safe.",
+    files: [
+      "src/main/java/com/examples/deposit/service/DemandDepositAccountTransactionService.java"
+    ],
+    code: `DemandDepositAccount account = loadAccountForUpdate(command.accountId(), command.customerId());
+AccountTransactionIdempotency existingIdempotency = findExistingIdempotency(command);
+if (existingIdempotency != null) {
+    return resolveReplayResult(existingIdempotency, command.customerId(), command.accountId(), ...);
+}`,
+    lang: "java"
+  },
+  idempotencyLedger: {
+    title: "Idempotency Ledger",
+    description: "A dedicated idempotency table maps customer and request identity to a posted transaction ID. Replayed calls return the existing transaction or fail on payload conflicts.",
+    files: [
+      "src/main/java/com/examples/deposit/domain/AccountTransactionIdempotency.java",
+      "src/main/java/com/examples/deposit/repository/AccountTransactionIdempotencyRepository.java"
+    ]
+  },
+  repositories: {
+    title: "Account and Transaction Repositories",
+    description: "Repository interfaces provide persistence and lock-aware lookups for accounts, blocks, and transactions. They are shared infrastructure for lifecycle, restriction, and posting services.",
+    files: [
+      "src/main/java/com/examples/deposit/repository/DemandDepositAccountRepository.java",
+      "src/main/java/com/examples/deposit/repository/DemandDepositAccountBlockRepository.java",
+      "src/main/java/com/examples/deposit/repository/DemandDepositAccountTransactionRepository.java"
+    ]
+  },
+  regressionSpecs: {
+    title: "Integration Regression Specs",
+    description: "Integration specs exercise activation, block management, and transaction enforcement end to end. They act as a safety net when feature rules evolve.",
+    files: [
+      "src/test/groovy/com/examples/deposit/integration/DemandDepositAccountActivationIntegrationSpec.groovy",
+      "src/test/groovy/com/examples/deposit/integration/DemandDepositAccountBlockIntegrationSpec.groovy",
+      "src/test/groovy/com/examples/deposit/integration/DemandDepositAccountTransactionIntegrationSpec.groovy"
+    ],
+    code: `def "active debit-disabled block with validation-required code rejects debit and keeps balances unchanged"() {
+    given: "active debit restriction"
+    when: "posting debit"
+    then: "request is rejected and balance stays unchanged"
+}`,
+    lang: "groovy"
+  }
+};
+
+const LEGEND = [
+  { label: 'Component', color: 'bg-node-component' },
+  { label: 'Composable', color: 'bg-node-composable' },
+  { label: 'Utility', color: 'bg-node-utility' },
+  { label: 'Data', color: 'bg-node-data' },
+  { label: 'External', color: 'bg-node-external' },
+  { label: 'Event', color: 'bg-node-event' }
+];
+
+const langs = [...new Set(Object.values(NODES).map((node) => node.lang).filter(Boolean))];
+if (langs.length === 0) langs.push('java');
+
+let highlighter = null;
+try {
+  highlighter = await createHighlighter({ themes: ['vitesse-dark'], langs });
+} catch (error) {
+  console.warn('Shiki failed to load:', error);
+}
+
+const HIGHLIGHTED = {};
+for (const [id, node] of Object.entries(NODES)) {
+  if (node.code && highlighter) {
+    try {
+      HIGHLIGHTED[id] = highlighter.codeToHtml(node.code, {
+        lang: node.lang || 'java',
+        theme: 'vitesse-dark'
+      });
+    } catch (error) {
+      console.warn('Highlight failed for', id, error);
+    }
+  }
+}
+
+function usePanZoom() {
+  const viewportRef = useRef(null);
+  const canvasRef = useRef(null);
+  const zoomDisplayRef = useRef(null);
+  const stateRef = useRef({ zoom: 1, panX: 0, panY: 0 });
+  const dragRef = useRef({ on: false, lx: 0, ly: 0 });
+
+  const applyTransform = useCallback(() => {
+    const { zoom, panX, panY } = stateRef.current;
+    if (canvasRef.current) {
+      canvasRef.current.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+    }
+    if (zoomDisplayRef.current) {
+      zoomDisplayRef.current.textContent = Math.round(zoom * 100) + '%';
+    }
+  }, []);
+
+  const fitToScreen = useCallback(() => {
+    const svg = canvasRef.current?.querySelector('svg');
+    const viewport = viewportRef.current;
+    if (!svg || !viewport) return;
+
+    const state = stateRef.current;
+    const viewportWidth = viewport.clientWidth;
+    const viewportHeight = viewport.clientHeight;
+    const svgWidth = svg.getBoundingClientRect().width / state.zoom;
+    const svgHeight = svg.getBoundingClientRect().height / state.zoom;
+
+    const fitScale = Math.max(0.15, Math.min(2, Math.min(
+      (viewportWidth - 80) / svgWidth,
+      (viewportHeight - 80) / svgHeight
+    )));
+
+    state.zoom = fitScale;
+    state.panX = (viewportWidth - svgWidth * fitScale) / 2;
+    state.panY = (viewportHeight - svgHeight * fitScale) / 2;
+    applyTransform();
+  }, [applyTransform]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const onWheel = (event) => {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      const state = stateRef.current;
+      const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const newZoom = Math.min(4, Math.max(0.15, state.zoom * factor));
+      const zoomScale = newZoom / state.zoom;
+
+      state.panX = mouseX - zoomScale * (mouseX - state.panX);
+      state.panY = mouseY - zoomScale * (mouseY - state.panY);
+      state.zoom = newZoom;
+      applyTransform();
+    };
+
+    const onPointerDown = (event) => {
+      if (event.target.closest('.node')) return;
+      dragRef.current = { on: true, lx: event.clientX, ly: event.clientY };
+      viewport.setPointerCapture(event.pointerId);
+    };
+
+    const onPointerMove = (event) => {
+      const drag = dragRef.current;
+      if (!drag.on) return;
+      const state = stateRef.current;
+      state.panX += event.clientX - drag.lx;
+      state.panY += event.clientY - drag.ly;
+      drag.lx = event.clientX;
+      drag.ly = event.clientY;
+      applyTransform();
+    };
+
+    const onPointerUp = () => {
+      dragRef.current.on = false;
+    };
+
+    viewport.addEventListener('wheel', onWheel, { passive: false });
+    viewport.addEventListener('pointerdown', onPointerDown);
+    viewport.addEventListener('pointermove', onPointerMove);
+    viewport.addEventListener('pointerup', onPointerUp);
+    viewport.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('resize', fitToScreen);
+
+    return () => {
+      viewport.removeEventListener('wheel', onWheel);
+      viewport.removeEventListener('pointerdown', onPointerDown);
+      viewport.removeEventListener('pointermove', onPointerMove);
+      viewport.removeEventListener('pointerup', onPointerUp);
+      viewport.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('resize', fitToScreen);
+    };
+  }, [applyTransform, fitToScreen]);
+
+  const zoomIn = useCallback(() => {
+    stateRef.current.zoom = Math.min(4, stateRef.current.zoom * 1.25);
+    applyTransform();
+  }, [applyTransform]);
+
+  const zoomOut = useCallback(() => {
+    stateRef.current.zoom = Math.max(0.15, stateRef.current.zoom / 1.25);
+    applyTransform();
+  }, [applyTransform]);
+
+  return {
+    viewportRef,
+    canvasRef,
+    zoomDisplayRef,
+    zoomIn,
+    zoomOut,
+    fitToScreen
+  };
+}
+
+function MermaidDiagram({ onNodeClick }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    window.nodeClickHandler = onNodeClick;
+
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      themeVariables: {
+        primaryColor: '#0a0a0a',
+        primaryTextColor: '#ffffff',
+        primaryBorderColor: '#2a2a2a',
+        lineColor: '#a0a0a0',
+        background: '#000000',
+        secondaryColor: '#000000',
+        tertiaryColor: '#000000',
+        mainBkg: '#0a0a0a',
+        nodeBorder: '#2a2a2a',
+        clusterBkg: 'rgba(10,10,10,0.8)',
+        clusterBorder: '#7c3aed',
+        titleColor: '#ffffff',
+        edgeLabelBackground: 'transparent'
+      },
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true,
+        curve: 'basis'
+      }
+    });
+
+    mermaid.render('walkthrough-diagram', DIAGRAM).then(({ svg, bindFunctions }) => {
+      if (containerRef.current) {
+        containerRef.current.innerHTML = svg;
+        bindFunctions?.(containerRef.current);
+      }
+    });
+
+    return () => {
+      delete window.nodeClickHandler;
+    };
+  }, [onNodeClick]);
+
+  return h('div', { ref: containerRef, className: 'mermaid-wrap' });
+}
+
+function Summary({ collapsed, onToggle }) {
+  if (collapsed) {
+    return h(
+      'div',
+      {
+        onClick: onToggle,
+        className: 'fixed top-16 left-6 z-10 px-3 py-1.5 bg-wt-surface/60 backdrop-blur border border-wt-border rounded-full shadow-lg cursor-pointer hover:bg-wt-surface/80 transition-all duration-300'
+      },
+      h('span', { className: 'text-xs text-wt-muted font-medium' }, 'Info summary')
+    );
+  }
+
+  return h(
+    'div',
+    {
+      onClick: onToggle,
+      className: 'fixed top-16 left-6 z-10 max-w-lg px-4 py-3 bg-wt-surface/80 backdrop-blur border border-wt-border rounded-lg shadow-lg cursor-pointer transition-all duration-300'
+    },
+    h('p', { className: 'text-sm text-wt-muted leading-relaxed' }, SUMMARY),
+    h('p', { className: 'text-[0.65rem] text-wt-muted/50 mt-1.5' }, 'Click to dismiss')
+  );
+}
+
+function DetailPanel({ nodeId, node, onClose }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  const codeHtml = HIGHLIGHTED[nodeId];
+
+  return h(
+    'div',
+    {
+      className: 'fixed top-4 right-4 bottom-4 w-[560px] z-30 bg-wt-surface border border-wt-border rounded-xl shadow-2xl flex flex-col overflow-hidden'
+    },
+    h(
+      'button',
+      {
+        onClick: onClose,
+        className: 'absolute top-3 right-3 z-10 w-7 h-7 rounded-md border border-wt-border bg-wt-raised text-wt-muted flex items-center justify-center text-lg hover:bg-wt-red hover:border-wt-red hover:text-white transition-colors'
+      },
+      'x'
+    ),
+    h(
+      'div',
+      { className: 'flex-1 overflow-y-auto p-5' },
+      h('h2', { className: 'text-lg font-bold text-wt-fg mb-3 pr-9' }, node.title),
+      h('div', { className: 'dt-body' }, h('p', null, node.description)),
+      node.code
+        ? h(
+            'div',
+            { className: 'dt-body' },
+            codeHtml
+              ? h('div', { dangerouslySetInnerHTML: { __html: codeHtml } })
+              : h('pre', { className: 'code-fallback' }, h('code', null, node.code))
+          )
+        : null,
+      node.files?.length > 0
+        ? h(
+            'div',
+            { className: 'mt-4 pt-3 border-t border-wt-border' },
+            h(
+              'div',
+              { className: 'text-[0.7rem] uppercase tracking-wider text-wt-muted font-semibold mb-1.5' },
+              'Files'
+            ),
+            h(
+              'code',
+              { className: 'text-sm text-wt-file font-mono leading-relaxed' },
+              node.files.map((file, index) => h('span', { key: `${file}-${index}` }, file, h('br')))
+            )
+          )
+        : null
+    )
+  );
+}
+
+function ZoomControls({ zoomDisplayRef, onZoomIn, onZoomOut, onFit }) {
+  return h(
+    'div',
+    {
+      className: 'fixed bottom-5 left-5 z-20 flex items-center gap-1 bg-wt-surface border border-wt-border rounded-lg shadow-xl overflow-hidden'
+    },
+    h(
+      'button',
+      {
+        onClick: onZoomOut,
+        className: 'px-2.5 py-1.5 text-wt-muted hover:text-wt-fg hover:bg-wt-raised transition-colors text-sm'
+      },
+      '-'
+    ),
+    h('span', { ref: zoomDisplayRef, className: 'px-2 py-1.5 text-xs text-wt-muted min-w-[3rem] text-center' }, '100%'),
+    h(
+      'button',
+      {
+        onClick: onZoomIn,
+        className: 'px-2.5 py-1.5 text-wt-muted hover:text-wt-fg hover:bg-wt-raised transition-colors text-sm'
+      },
+      '+'
+    ),
+    h(
+      'button',
+      {
+        onClick: onFit,
+        className: 'px-2.5 py-1.5 text-wt-muted hover:text-wt-fg hover:bg-wt-raised transition-colors text-xs border-l border-wt-border'
+      },
+      'Fit'
+    )
+  );
+}
+
+function App() {
+  const [activeId, setActiveIdState] = useState(null);
+  const [summaryCollapsed, setSummaryCollapsed] = useState(true);
+  const panZoom = usePanZoom();
+
+  const setActiveNode = useCallback((nodeId) => {
+    setActiveIdState(nodeId);
+    setSummaryCollapsed(true);
+
+    document.querySelectorAll('.mermaid-wrap .node').forEach((nodeElement) => {
+      nodeElement.style.opacity = nodeId ? '0.4' : '1';
+    });
+
+    if (nodeId) {
+      const selected = document.querySelector(`.mermaid-wrap .node[id*="${nodeId}"]`);
+      if (selected) selected.style.opacity = '1';
+    }
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    setActiveIdState(null);
+    document.querySelectorAll('.mermaid-wrap .node').forEach((nodeElement) => {
+      nodeElement.style.opacity = '1';
+    });
+  }, []);
+
+  useEffect(() => {
+    setTimeout(panZoom.fitToScreen, 600);
+  }, [panZoom.fitToScreen]);
+
+  return h(
+    window.React.Fragment,
+    null,
+    h(
+      'header',
+      {
+        className: 'fixed top-0 inset-x-0 z-10 px-6 py-3.5 bg-gradient-to-b from-wt-bg to-transparent pointer-events-none'
+      },
+      h('h1', { className: 'text-base font-semibold text-wt-fg' }, 'Demand Deposit Account Features Walkthrough'),
+      h('p', { className: 'text-sm text-wt-muted mt-0.5' }, 'Account lifecycle, block controls, and transaction posting flow')
+    ),
+    h(Summary, {
+      collapsed: summaryCollapsed,
+      onToggle: () => setSummaryCollapsed((collapsed) => !collapsed)
+    }),
+    h(
+      'div',
+      {
+        ref: panZoom.viewportRef,
+        className: 'w-full h-screen overflow-hidden cursor-grab active:cursor-grabbing'
+      },
+      h(
+        'div',
+        {
+          ref: panZoom.canvasRef,
+          className: 'origin-top-left will-change-transform inline-block p-[80px_60px_60px]'
+        },
+        h(MermaidDiagram, { onNodeClick: setActiveNode })
+      )
+    ),
+    h(ZoomControls, {
+      zoomDisplayRef: panZoom.zoomDisplayRef,
+      onZoomIn: panZoom.zoomIn,
+      onZoomOut: panZoom.zoomOut,
+      onFit: panZoom.fitToScreen
+    }),
+    h(
+      'div',
+      {
+        className: 'fixed bottom-5 left-1/2 -translate-x-1/2 z-20 flex gap-4 px-4 py-2 bg-wt-surface border border-wt-border rounded-lg shadow-xl'
+      },
+      LEGEND.map((item) => h(
+        'span',
+        { key: item.label, className: 'flex items-center gap-1.5 text-xs text-wt-muted' },
+        h('span', { className: `w-2 h-2 rounded-full ${item.color}` }),
+        item.label
+      ))
+    ),
+    activeId && NODES[activeId]
+      ? h(DetailPanel, { nodeId: activeId, node: NODES[activeId], onClose: closeDetail })
+      : null,
+    h(
+      'div',
+      { className: 'fixed bottom-5 right-5 z-20 text-xs text-wt-muted opacity-50' },
+      h('kbd', null, 'Scroll'),
+      ' zoom | ',
+      h('kbd', null, 'Drag'),
+      ' pan | Click nodes'
+    )
+  );
+}
+
+window.ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
