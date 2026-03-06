@@ -80,6 +80,42 @@ public class ApiProblemFactory {
         );
     }
 
+    public org.springframework.http.ProblemDetail transactionBlocked() {
+        return build(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "deposit/transaction-blocked",
+            "Transaction blocked",
+            "Transaction is blocked by active account restrictions"
+        );
+    }
+
+    public org.springframework.http.ProblemDetail transactionNotAllowedForAccountStatus() {
+        return build(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "deposit/transaction-not-allowed-for-account-status",
+            "Transaction not allowed for account status",
+            "Transaction is not allowed for the current account status"
+        );
+    }
+
+    public org.springframework.http.ProblemDetail insufficientAvailableBalance() {
+        return build(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "deposit/insufficient-available-balance",
+            "Insufficient available balance",
+            "Available balance is insufficient for the requested debit"
+        );
+    }
+
+    public org.springframework.http.ProblemDetail transactionIdempotencyConflict() {
+        return build(
+            HttpStatus.CONFLICT,
+            "deposit/transaction-idempotency-conflict",
+            "Transaction idempotency conflict",
+            "Unable to resolve idempotent transaction request"
+        );
+    }
+
     private org.springframework.http.ProblemDetail build(HttpStatus status, String type, String title, String detail) {
         org.springframework.http.ProblemDetail problemDetail = org.springframework.http.ProblemDetail.forStatusAndDetail(status, detail);
         problemDetail.setType(URI.create(type));

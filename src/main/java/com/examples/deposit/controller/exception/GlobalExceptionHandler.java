@@ -6,6 +6,10 @@ import com.examples.deposit.domain.exception.BlockNotFoundException;
 import com.examples.deposit.domain.exception.BlockNotEligibleForOperationException;
 import com.examples.deposit.domain.exception.DuplicateOrOverlappingBlockException;
 import com.examples.deposit.domain.exception.IdempotencyConflictException;
+import com.examples.deposit.domain.exception.InsufficientAvailableBalanceException;
+import com.examples.deposit.domain.exception.TransactionBlockedException;
+import com.examples.deposit.domain.exception.TransactionIdempotencyConflictException;
+import com.examples.deposit.domain.exception.TransactionNotAllowedForAccountStatusException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -70,6 +74,40 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(404)
             .contentType(MediaType.APPLICATION_PROBLEM_JSON)
             .body(apiProblemFactory.blockNotFound());
+    }
+
+    @ExceptionHandler(TransactionBlockedException.class)
+    public ResponseEntity<ProblemDetail> handleTransactionBlocked(TransactionBlockedException ignored) {
+        return ResponseEntity.unprocessableEntity()
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(apiProblemFactory.transactionBlocked());
+    }
+
+    @ExceptionHandler(TransactionNotAllowedForAccountStatusException.class)
+    public ResponseEntity<ProblemDetail> handleTransactionNotAllowedForAccountStatus(
+        TransactionNotAllowedForAccountStatusException ignored
+    ) {
+        return ResponseEntity.unprocessableEntity()
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(apiProblemFactory.transactionNotAllowedForAccountStatus());
+    }
+
+    @ExceptionHandler(InsufficientAvailableBalanceException.class)
+    public ResponseEntity<ProblemDetail> handleInsufficientAvailableBalance(
+        InsufficientAvailableBalanceException ignored
+    ) {
+        return ResponseEntity.unprocessableEntity()
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(apiProblemFactory.insufficientAvailableBalance());
+    }
+
+    @ExceptionHandler(TransactionIdempotencyConflictException.class)
+    public ResponseEntity<ProblemDetail> handleTransactionIdempotencyConflict(
+        TransactionIdempotencyConflictException ignored
+    ) {
+        return ResponseEntity.status(409)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(apiProblemFactory.transactionIdempotencyConflict());
     }
 
     @ExceptionHandler({

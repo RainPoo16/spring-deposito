@@ -12,8 +12,15 @@ import com.examples.deposit.domain.exception.BlockNotEligibleForOperationExcepti
 import com.examples.deposit.domain.exception.CustomerNotEligibleForAccountCreationException
 import com.examples.deposit.domain.exception.DuplicateOrOverlappingBlockException
 import com.examples.deposit.domain.exception.IdempotencyConflictException
+import com.examples.deposit.domain.exception.InsufficientAvailableBalanceException
+import com.examples.deposit.domain.exception.TransactionBlockedException
+import com.examples.deposit.domain.exception.TransactionIdempotencyConflictException
+import com.examples.deposit.domain.exception.TransactionNotAllowedForAccountStatusException
+import com.examples.deposit.domain.TransactionType
 import com.examples.deposit.service.DemandDepositAccountBlockService
 import com.examples.deposit.service.DemandDepositAccountService
+import com.examples.deposit.service.DemandDepositAccountTransactionService
+import com.examples.deposit.service.dto.PostedTransactionResult
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.context.annotation.Import
@@ -45,6 +52,208 @@ class DemandDepositAccountControllerSpec extends Specification {
 
     @org.spockframework.spring.SpringBean
     DemandDepositAccountBlockService demandDepositAccountBlockService = Mock()
+
+    @org.spockframework.spring.SpringBean
+    DemandDepositAccountTransactionService demandDepositAccountTransactionService = Mock()
+
+    def "posts credit transaction and returns 201 with JSON payload"() {
+        given:
+        UUID customerId = UUID.fromString("21212121-2121-2121-2121-212121212121")
+        UUID accountId = UUID.fromString("31313131-3131-3131-3131-313131313131")
+        UUID transactionId = UUID.fromString("41414141-4141-4141-4141-414141414141")
+        def postedAt = java.time.Instant.parse("2026-03-06T10:15:30Z")
+
+        demandDepositAccountTransactionService.postCredit(_ as com.examples.deposit.service.dto.PostCreditTransactionCommand) >>
+            new PostedTransactionResult(
+                transactionId,
+                accountId,
+                customerId,
+                TransactionType.CREDIT,
+                new BigDecimal("250.50"),
+                "SAL",
+                "ref-credit-001",
+                "idem-credit-001",
+                postedAt,
+                new BigDecimal("1250.50"),
+                new BigDecimal("1250.50")
+            )
+
+        when:
+        def result = mockMvc.perform(post('/transactions/credit')
+            .contentType(MediaType.APPLICATION_JSON)
+            .header('x-customer-id', customerId.toString())
+            .content('''
+                {
+                  "accountId": "31313131-3131-3131-3131-313131313131",
+                  "amount": 250.50,
+                  "transactionCode": "SAL",
+                  "referenceId": "ref-credit-001",
+                  "idempotencyKey": "idem-credit-001"
+                }
+            '''))
+
+        then:
+        result.andExpect(status().isCreated())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath('$.transactionId').value(transactionId.toString()))
+            .andExpect(jsonPath('$.accountId').value(accountId.toString()))
+            .andExpect(jsonPath('$.customerId').value(customerId.toString()))
+            .andExpect(jsonPath('$.transactionType').value('CREDIT'))
+            .andExpect(jsonPath('$.amount').value(250.5))
+            .andExpect(jsonPath('$.currentBalance').value(1250.5))
+            .andExpect(jsonPath('$.availableBalance').value(1250.5))
+    }
+
+    def "posts debit transaction and returns 201 with JSON payload"() {
+        given:
+        UUID customerId = UUID.fromString("22222222-3333-4444-5555-666666666666")
+        UUID accountId = UUID.fromString("77777777-8888-9999-aaaa-bbbbbbbbbbbb")
+        UUID transactionId = UUID.fromString("cccccccc-dddd-eeee-ffff-000000000000")
+        def postedAt = java.time.Instant.parse("2026-03-06T11:15:30Z")
+
+        demandDepositAccountTransactionService.postDebit(_ as com.examples.deposit.service.dto.PostDebitTransactionCommand) >>
+            new PostedTransactionResult(
+                transactionId,
+                accountId,
+                customerId,
+                TransactionType.DEBIT,
+                new BigDecimal("100.00"),
+                "ATM",
+                "ref-debit-001",
+                "idem-debit-001",
+                postedAt,
+                new BigDecimal("900.00"),
+                new BigDecimal("900.00")
+            )
+
+        when:
+        def result = mockMvc.perform(post('/transactions/debit')
+            .contentType(MediaType.APPLICATION_JSON)
+            .header('x-customer-id', customerId.toString())
+            .content('''
+                {
+                  "accountId": "77777777-8888-9999-aaaa-bbbbbbbbbbbb",
+                  "amount": 100.00,
+                  "transactionCode": "ATM",
+                  "referenceId": "ref-debit-001",
+                  "idempotencyKey": "idem-debit-001"
+                }
+            '''))
+
+        then:
+        result.andExpect(status().isCreated())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath('$.transactionId').value(transactionId.toString()))
+            .andExpect(jsonPath('$.accountId').value(accountId.toString()))
+            .andExpect(jsonPath('$.customerId').value(customerId.toString()))
+            .andExpect(jsonPath('$.transactionType').value('DEBIT'))
+            .andExpect(jsonPath('$.amount').value(100.0))
+            .andExpect(jsonPath('$.currentBalance').value(900.0))
+            .andExpect(jsonPath('$.availableBalance').value(900.0))
+    }
+
+    def "returns 400 problem detail when credit request fails validation"() {
+        given:
+        UUID customerId = UUID.fromString("99999999-1111-2222-3333-444444444444")
+
+        when:
+        def result = mockMvc.perform(post('/transactions/credit')
+            .contentType(MediaType.APPLICATION_JSON)
+            .header('x-customer-id', customerId.toString())
+            .content('{"accountId":null,"amount":0,"transactionCode":"","referenceId":"","idempotencyKey":""}'))
+
+        then:
+        result.andExpect(status().isBadRequest())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.status').value(400))
+            .andExpect(jsonPath('$.title').value('Validation failed'))
+        0 * demandDepositAccountTransactionService._
+    }
+
+    def "maps transaction failures to problem details with expected 4xx statuses"() {
+        given:
+        UUID customerId = UUID.fromString("abababab-abab-abab-abab-abababababab")
+        UUID accountId = UUID.fromString("bcbcbcbc-bcbc-bcbc-bcbc-bcbcbcbcbcbc")
+
+        demandDepositAccountTransactionService.postCredit(_ as com.examples.deposit.service.dto.PostCreditTransactionCommand) >> {
+            throw new TransactionBlockedException(accountId, TransactionType.CREDIT, "SAL", "ACC")
+        }
+        demandDepositAccountTransactionService.postDebit(_ as com.examples.deposit.service.dto.PostDebitTransactionCommand) >> {
+            throw new TransactionNotAllowedForAccountStatusException(accountId, DemandDepositAccountStatus.DORMANT, TransactionType.DEBIT, "ATM")
+        } >> {
+            throw new InsufficientAvailableBalanceException(accountId, new BigDecimal("10.00"), new BigDecimal("100.00"))
+        } >> {
+            throw new TransactionIdempotencyConflictException(customerId, "idem-debit-fail", "ref-debit-fail")
+        }
+
+        when:
+        def blockedResult = mockMvc.perform(post('/transactions/credit')
+            .contentType(MediaType.APPLICATION_JSON)
+            .header('x-customer-id', customerId.toString())
+            .content('''
+                {
+                  "accountId": "bcbcbcbc-bcbc-bcbc-bcbc-bcbcbcbcbcbc",
+                  "amount": 50.00,
+                  "transactionCode": "SAL",
+                  "referenceId": "ref-credit-fail",
+                  "idempotencyKey": "idem-credit-fail"
+                }
+            '''))
+        def statusResult = mockMvc.perform(post('/transactions/debit')
+            .contentType(MediaType.APPLICATION_JSON)
+            .header('x-customer-id', customerId.toString())
+            .content('''
+                {
+                  "accountId": "bcbcbcbc-bcbc-bcbc-bcbc-bcbcbcbcbcbc",
+                  "amount": 50.00,
+                  "transactionCode": "ATM",
+                  "referenceId": "ref-debit-status",
+                  "idempotencyKey": "idem-debit-status"
+                }
+            '''))
+        def balanceResult = mockMvc.perform(post('/transactions/debit')
+            .contentType(MediaType.APPLICATION_JSON)
+            .header('x-customer-id', customerId.toString())
+            .content('''
+                {
+                  "accountId": "bcbcbcbc-bcbc-bcbc-bcbc-bcbcbcbcbcbc",
+                  "amount": 100.00,
+                  "transactionCode": "ATM",
+                  "referenceId": "ref-debit-balance",
+                  "idempotencyKey": "idem-debit-balance"
+                }
+            '''))
+        def idempotencyResult = mockMvc.perform(post('/transactions/debit')
+            .contentType(MediaType.APPLICATION_JSON)
+            .header('x-customer-id', customerId.toString())
+            .content('''
+                {
+                  "accountId": "bcbcbcbc-bcbc-bcbc-bcbc-bcbcbcbcbcbc",
+                  "amount": 100.00,
+                  "transactionCode": "ATM",
+                  "referenceId": "ref-debit-fail",
+                  "idempotencyKey": "idem-debit-fail"
+                }
+            '''))
+
+        then:
+        blockedResult.andExpect(status().isUnprocessableEntity())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.status').value(422))
+            .andExpect(jsonPath('$.type').value('deposit/transaction-blocked'))
+        statusResult.andExpect(status().isUnprocessableEntity())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.status').value(422))
+            .andExpect(jsonPath('$.type').value('deposit/transaction-not-allowed-for-account-status'))
+        balanceResult.andExpect(status().isUnprocessableEntity())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.status').value(422))
+            .andExpect(jsonPath('$.type').value('deposit/insufficient-available-balance'))
+        idempotencyResult.andExpect(status().isConflict())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath('$.status').value(409))
+            .andExpect(jsonPath('$.type').value('deposit/transaction-idempotency-conflict'))
+    }
 
     def "creates block and returns 201 with JSON payload"() {
         given:

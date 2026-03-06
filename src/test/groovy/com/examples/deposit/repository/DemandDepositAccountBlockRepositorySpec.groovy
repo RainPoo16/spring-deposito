@@ -139,4 +139,74 @@ class DemandDepositAccountBlockRepositorySpec extends Specification {
         then:
         !overlaps
     }
+
+    def "detects active incoming restriction for credit postings"() {
+        given:
+        UUID customerId = UUID.randomUUID()
+        DemandDepositAccount account = demandDepositAccountRepository.saveAndFlush(
+            DemandDepositAccount.create(customerId, DemandDepositAccountStatus.ACTIVE)
+        )
+
+        and:
+        demandDepositAccountBlockRepository.saveAndFlush(
+            DemandDepositAccountBlock.create(
+                account.id,
+                BlockCode.ACB,
+                BlockRequestedBy.BANK,
+                AccountBlockStatus.ACTIVE,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 3, 31),
+                "incoming restriction"
+            )
+        )
+
+        when:
+        boolean hasCreditRestriction = demandDepositAccountBlockRepository.existsActiveCreditRestrictionOn(
+            account.id,
+            LocalDate.of(2026, 3, 10)
+        )
+        boolean noRestrictionAfterExpiry = demandDepositAccountBlockRepository.existsActiveCreditRestrictionOn(
+            account.id,
+            LocalDate.of(2026, 4, 1)
+        )
+
+        then:
+        hasCreditRestriction
+        !noRestrictionAfterExpiry
+    }
+
+    def "detects active outgoing restriction for debit postings"() {
+        given:
+        UUID customerId = UUID.randomUUID()
+        DemandDepositAccount account = demandDepositAccountRepository.saveAndFlush(
+            DemandDepositAccount.create(customerId, DemandDepositAccountStatus.ACTIVE)
+        )
+
+        and:
+        demandDepositAccountBlockRepository.saveAndFlush(
+            DemandDepositAccountBlock.create(
+                account.id,
+                BlockCode.ADB,
+                BlockRequestedBy.BANK,
+                AccountBlockStatus.ACTIVE,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 3, 31),
+                "outgoing restriction"
+            )
+        )
+
+        when:
+        boolean hasDebitRestriction = demandDepositAccountBlockRepository.existsActiveDebitRestrictionOn(
+            account.id,
+            LocalDate.of(2026, 3, 10)
+        )
+        boolean noRestrictionAfterExpiry = demandDepositAccountBlockRepository.existsActiveDebitRestrictionOn(
+            account.id,
+            LocalDate.of(2026, 4, 1)
+        )
+
+        then:
+        hasDebitRestriction
+        !noRestrictionAfterExpiry
+    }
 }

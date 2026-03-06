@@ -2,6 +2,10 @@ package com.examples.deposit.controller;
 
 import com.examples.deposit.controller.dto.CreateDemandDepositAccountReq;
 import com.examples.deposit.controller.dto.CreateDemandDepositAccountResp;
+import com.examples.deposit.controller.dto.PostCreditTransactionReq;
+import com.examples.deposit.controller.dto.PostCreditTransactionResp;
+import com.examples.deposit.controller.dto.PostDebitTransactionReq;
+import com.examples.deposit.controller.dto.PostDebitTransactionResp;
 import com.examples.deposit.controller.dto.CreateDemandDepositAccountBlockReq;
 import com.examples.deposit.controller.dto.CreateDemandDepositAccountBlockResp;
 import com.examples.deposit.controller.dto.UpdateDemandDepositAccountBlockReq;
@@ -12,11 +16,21 @@ import com.examples.deposit.domain.exception.CustomerNotEligibleForAccountCreati
 import com.examples.deposit.domain.exception.IdempotencyConflictException;
 import com.examples.deposit.service.DemandDepositAccountBlockService;
 import com.examples.deposit.service.DemandDepositAccountService;
+import com.examples.deposit.service.DemandDepositAccountTransactionService;
 import com.examples.deposit.service.dto.CreateDemandDepositAccountBlockCommand;
+import com.examples.deposit.service.dto.PostCreditTransactionCommand;
+import com.examples.deposit.service.dto.PostDebitTransactionCommand;
+import com.examples.deposit.service.dto.PostedTransactionResult;
 import com.examples.deposit.service.dto.UpdateDemandDepositAccountBlockCommand;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,6 +48,7 @@ public class DemandDepositAccountController {
 
     private final DemandDepositAccountService demandDepositAccountService;
     private final DemandDepositAccountBlockService demandDepositAccountBlockService;
+    private final DemandDepositAccountTransactionService demandDepositAccountTransactionService;
 
     @PostMapping("/demand-deposit-accounts")
     public ResponseEntity<CreateDemandDepositAccountResp> createDemandDepositAccount(
@@ -48,6 +63,130 @@ public class DemandDepositAccountController {
             createdAccount.getId(),
             createdAccount.getCustomerId(),
             createdAccount.getStatus().name()
+        );
+
+        return ResponseEntity.status(201)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(response);
+    }
+
+    @PostMapping("/transactions/credit")
+    @Operation(summary = "Post a credit transaction")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Credit transaction posted successfully", content = @Content(
+            mediaType = MediaType.APPLICATION_JSON_VALUE,
+            schema = @Schema(implementation = PostCreditTransactionResp.class)
+        )),
+        @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        )),
+        @ApiResponse(responseCode = "404", description = "Account not found", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        )),
+        @ApiResponse(responseCode = "409", description = "Transaction idempotency conflict", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        )),
+        @ApiResponse(responseCode = "422", description = "Transaction cannot be processed", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        )),
+        @ApiResponse(responseCode = "500", description = "Unexpected server error", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        ))
+    })
+    public ResponseEntity<PostCreditTransactionResp> postCreditTransaction(
+        @RequestHeader("x-customer-id") UUID customerId,
+        @RequestBody @Valid PostCreditTransactionReq request
+    ) {
+        PostedTransactionResult posted = demandDepositAccountTransactionService.postCredit(
+            new PostCreditTransactionCommand(
+                request.accountId(),
+                customerId,
+                request.amount(),
+                request.transactionCode(),
+                request.referenceId(),
+                request.idempotencyKey()
+            )
+        );
+
+        PostCreditTransactionResp response = new PostCreditTransactionResp(
+            posted.transactionId(),
+            posted.accountId(),
+            posted.customerId(),
+            posted.transactionType().name(),
+            posted.amount(),
+            posted.transactionCode(),
+            posted.referenceId(),
+            posted.idempotencyKey(),
+            posted.postedAt(),
+            posted.currentBalance(),
+            posted.availableBalance()
+        );
+
+        return ResponseEntity.status(201)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(response);
+    }
+
+    @PostMapping("/transactions/debit")
+    @Operation(summary = "Post a debit transaction")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Debit transaction posted successfully", content = @Content(
+            mediaType = MediaType.APPLICATION_JSON_VALUE,
+            schema = @Schema(implementation = PostDebitTransactionResp.class)
+        )),
+        @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        )),
+        @ApiResponse(responseCode = "404", description = "Account not found", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        )),
+        @ApiResponse(responseCode = "409", description = "Transaction idempotency conflict", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        )),
+        @ApiResponse(responseCode = "422", description = "Transaction cannot be processed", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        )),
+        @ApiResponse(responseCode = "500", description = "Unexpected server error", content = @Content(
+            mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+            schema = @Schema(implementation = ProblemDetail.class)
+        ))
+    })
+    public ResponseEntity<PostDebitTransactionResp> postDebitTransaction(
+        @RequestHeader("x-customer-id") UUID customerId,
+        @RequestBody @Valid PostDebitTransactionReq request
+    ) {
+        PostedTransactionResult posted = demandDepositAccountTransactionService.postDebit(
+            new PostDebitTransactionCommand(
+                request.accountId(),
+                customerId,
+                request.amount(),
+                request.transactionCode(),
+                request.referenceId(),
+                request.idempotencyKey()
+            )
+        );
+
+        PostDebitTransactionResp response = new PostDebitTransactionResp(
+            posted.transactionId(),
+            posted.accountId(),
+            posted.customerId(),
+            posted.transactionType().name(),
+            posted.amount(),
+            posted.transactionCode(),
+            posted.referenceId(),
+            posted.idempotencyKey(),
+            posted.postedAt(),
+            posted.currentBalance(),
+            posted.availableBalance()
         );
 
         return ResponseEntity.status(201)

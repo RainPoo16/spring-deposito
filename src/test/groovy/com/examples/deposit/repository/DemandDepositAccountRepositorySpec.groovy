@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
 import spock.lang.Specification
 
+import java.math.BigDecimal
 import java.util.UUID
 
 @DataJpaTest
@@ -68,6 +69,53 @@ class DemandDepositAccountRepositorySpec extends Specification {
         when:
         def foundForOwner = demandDepositAccountRepository.findByIdAndCustomerId(persisted.id, ownerCustomerId)
         def foundForAnotherCustomer = demandDepositAccountRepository.findByIdAndCustomerId(persisted.id, anotherCustomerId)
+
+        then:
+        foundForOwner.isPresent()
+        foundForOwner.get().id == persisted.id
+        foundForAnotherCustomer.isEmpty()
+    }
+
+    def "persists current and available balances with deterministic defaults"() {
+        given:
+        UUID customerId = UUID.randomUUID()
+        DemandDepositAccount account = DemandDepositAccount.create(customerId, DemandDepositAccountStatus.ACTIVE)
+        account.applyCredit(new BigDecimal("120.00"), "CASH_DEPOSIT")
+        account.applyDebit(new BigDecimal("20.00"), "POS_PURCHASE")
+
+        when:
+        DemandDepositAccount persisted = demandDepositAccountRepository.saveAndFlush(account)
+        entityManager.clear()
+
+        then:
+        DemandDepositAccount reloaded = demandDepositAccountRepository.findById(persisted.id).orElseThrow()
+        reloaded.currentBalance == new BigDecimal("100.00")
+        reloaded.availableBalance == new BigDecimal("100.00")
+
+        and:
+        BigDecimal persistedCurrentBalance = (BigDecimal) entityManager
+            .createNativeQuery("SELECT current_balance FROM demand_deposit_account WHERE id = :id")
+            .setParameter("id", persisted.id)
+            .getSingleResult()
+        BigDecimal persistedAvailableBalance = (BigDecimal) entityManager
+            .createNativeQuery("SELECT available_balance FROM demand_deposit_account WHERE id = :id")
+            .setParameter("id", persisted.id)
+            .getSingleResult()
+        persistedCurrentBalance == new BigDecimal("100.00")
+        persistedAvailableBalance == new BigDecimal("100.00")
+    }
+
+    def "findByIdAndCustomerIdForUpdate returns account only for matching owner"() {
+        given:
+        UUID ownerCustomerId = UUID.randomUUID()
+        UUID anotherCustomerId = UUID.randomUUID()
+        DemandDepositAccount persisted = demandDepositAccountRepository.saveAndFlush(
+            DemandDepositAccount.create(ownerCustomerId, DemandDepositAccountStatus.ACTIVE)
+        )
+
+        when:
+        def foundForOwner = demandDepositAccountRepository.findByIdAndCustomerIdForUpdate(persisted.id, ownerCustomerId)
+        def foundForAnotherCustomer = demandDepositAccountRepository.findByIdAndCustomerIdForUpdate(persisted.id, anotherCustomerId)
 
         then:
         foundForOwner.isPresent()
